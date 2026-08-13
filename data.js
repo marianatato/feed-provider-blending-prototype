@@ -298,7 +298,7 @@ function buildEventMarkets(){
         });
         return { name, prices };
       });
-      return { marketType: mt, carrierIds, selections, override: null };
+      return { marketType: mt, carrierIds, selections, override: { prematch:null, inplay:null } };
     });
   });
   return out;

@@ -770,7 +770,11 @@ function updateMtBulkBar(){
   const bar = document.getElementById('mt-bulk-bar');
   const n = bcMtSelected.size;
   bar.classList.toggle('open', n>0);
-  document.getElementById('mt-bulk-count').textContent = n;
+  document.getElementById('mt-bulk-label').textContent = n>0 ? `${n} market type row(s) selected` : 'Check market type rows below (✓) to enable bulk actions';
+  document.getElementById('mt-bulk-label').classList.toggle('bulk-bar__hint', n===0);
+  ['mt-bulk-prematch','mt-bulk-inplay','mt-bulk-secondary','mt-bulk-apply','mt-bulk-remove'].forEach(id=>{
+    document.getElementById(id).disabled = n===0;
+  });
 }
 document.getElementById('mt-bulk-apply').addEventListener('click', ()=>{
   const preV = document.getElementById('mt-bulk-prematch').value;
@@ -1042,7 +1046,9 @@ const moPending = {};              // key: `${eventId}:${marketType}` -> provide
 const eoExpandedEvents = new Set();   // event ids with markets shown
 const eoExpandedMarkets = new Set();  // `${eventId}:${marketType}` with selections shown
 const eoSelectedEvents = new Set();    // bulk-select on the main events table
-function moKey(evtId, mt){ return `${evtId}:${mt}`; }
+// Market overrides are phase-split, same as event-level overrides — a
+// market can be pinned to one provider Pre-Match and a different one In-Play.
+function moKey(evtId, mt, phase){ return `${evtId}:${mt}:${phase}`; }
 
 // The provider that would serve this event's markets by default — its
 // Pre-Match or In-Play effective provider, whichever matches current status.
@@ -1050,23 +1056,26 @@ function marketAssignedProvider(evt){
   const phase = evt.status === 'in-play' ? 'inplay' : 'prematch';
   return effectiveEventProvider(evt, phase).value;
 }
-// Resolves a market's serving provider ignoring any pending (unsaved) override.
-function marketBaseEffective(evt, market){
-  const assigned = marketAssignedProvider(evt);
-  if (market.override) return { value: market.override, isGap: !market.carrierIds.includes(market.override), source:'override' };
+// Resolves a market's serving provider for a given phase, ignoring any
+// pending (unsaved) override.
+function marketBaseEffective(evt, market, phase){
+  const ownOverride = market.override ? market.override[phase] : null;
+  const assigned = effectiveEventProvider(evt, phase).value;
+  if (ownOverride) return { value: ownOverride, isGap: !market.carrierIds.includes(ownOverride), source:'override' };
   if (market.carrierIds.includes(assigned)) return { value: assigned, isGap:false, source:'default' };
   if (market.carrierIds.length) return { value: market.carrierIds[0], isGap:true, source:'blend' };
   return { value:null, isGap:true, source:'none' };
 }
 // Same as above but accounts for a staged (unsaved) market-level override.
-function effectiveMarketProvider(evt, market){
-  const pk = moKey(evt.id, market.marketType);
+function effectiveMarketProvider(evt, market, phase){
+  const pk = moKey(evt.id, market.marketType, phase);
   if (pk in moPending){
     const v = moPending[pk];
     if (v) return { value:v, isGap: !market.carrierIds.includes(v), source:'override', pending:true };
-    return { ...marketBaseEffective(evt, { ...market, override:null }), pending:true };
+    const cleared = { ...market, override: { ...market.override, [phase]:null } };
+    return { ...marketBaseEffective(evt, cleared, phase), pending:true };
   }
-  return { ...marketBaseEffective(evt, market), pending:false };
+  return { ...marketBaseEffective(evt, market, phase), pending:false };
 }
 
 function populateEventFilters(){
@@ -1188,35 +1197,42 @@ function renderEventsTable(){
   updateEoSelectAllCheckbox();
 }
 
-// Markets for one event — current (effective) provider per market type,
-// changeable; expands further into a read-only selection/price comparison.
+// Markets for one event — each with its own Pre-Match AND In-Play provider
+// (independent, same split as the event-level overrides), both changeable;
+// expands further into a read-only selection/price comparison.
 function renderMarketsForEvent(evt){
   const markets = EVENT_MARKETS[evt.id] || [];
   if (!markets.length) return `<div class="empty-state" style="padding:var(--sp-3)">No market data for this event.</div>`;
+  const currentPhase = evt.status === 'in-play' ? 'inplay' : 'prematch';
+  const renderPhaseCell = (evt, m, phase) => {
+    const key = moKey(evt.id, m.marketType, phase);
+    const ownOverride = (key in moPending) ? moPending[key] : (m.override ? m.override[phase] : null);
+    const cleared = { ...m, override: { ...m.override, [phase]:null } };
+    const base = marketBaseEffective(evt, cleared, phase);
+    const eff = effectiveMarketProvider(evt, m, phase);
+    const baseLabel = base.value ? providerById(base.value).name : 'no coverage';
+    const options = `<option value="">Use default (${baseLabel})</option>` +
+      PROVIDERS.map(p=>`<option value="${p.id}" ${ownOverride===p.id?'selected':''}>${p.name}</option>`).join('');
+    const pendingFlag = (key in moPending) ? '<span class="badge badge-yellow">unsaved</span>' : '';
+    const gapBadge = !eff.isGap ? '' : (eff.value ? '<span class="badge badge-yellow">Blended</span>' : '<span class="badge badge-red">No coverage</span>');
+    return `<div class="flex-gap-1"><select class="select input-sm" style="width:132px;" data-mkt-override="${key}">${options}</select>${pendingFlag}${gapBadge}</div>`;
+  };
   return `
   <table class="market-table">
-    <thead><tr><th style="width:20px;"></th><th>Market Type</th><th style="width:210px;">Current Provider</th><th style="width:110px;"></th></tr></thead>
+    <thead><tr><th style="width:20px;"></th><th>Market Type</th><th style="width:230px;">Pre-Match</th><th style="width:230px;">In-Play</th></tr></thead>
     <tbody>
       ${markets.map(m=>{
-        const key = moKey(evt.id, m.marketType);
-        const ownOverride = (key in moPending) ? moPending[key] : m.override;
-        const base = marketBaseEffective(evt, { ...m, override:null });
-        const eff = effectiveMarketProvider(evt, m);
-        const mExpanded = eoExpandedMarkets.has(key);
-        const baseLabel = base.value ? providerById(base.value).name : 'no coverage';
-        const options = `<option value="">Use default (${baseLabel})</option>` +
-          PROVIDERS.map(p=>`<option value="${p.id}" ${ownOverride===p.id?'selected':''}>${p.name}</option>`).join('');
-        const pendingFlag = (key in moPending) ? '<span class="badge badge-yellow" style="margin-left:6px;">unsaved</span>' : '';
-        const gapBadge = !eff.isGap ? '<span class="badge badge-gray">Default</span>'
-          : (eff.value ? '<span class="badge badge-yellow">Blended</span>' : '<span class="badge badge-red">No coverage</span>');
+        const mExpandKey = `${evt.id}:${m.marketType}`;
+        const mExpanded = eoExpandedMarkets.has(mExpandKey);
+        const currentProviderId = effectiveMarketProvider(evt, m, currentPhase).value;
         return `
-        <tr class="market-row ${eff.isGap?'market-row--gap':''}">
-          <td><span class="eo-expand-btn ${mExpanded?'open':''}" data-mkt-expand="${key}">${ic('chevron-right',12)}</span></td>
+        <tr class="market-row">
+          <td><span class="eo-expand-btn ${mExpanded?'open':''}" data-mkt-expand="${mExpandKey}">${ic('chevron-right',12)}</span></td>
           <td>${m.marketType}</td>
-          <td><div class="flex-gap-1"><select class="select input-sm" style="width:170px;" data-mkt-override="${key}">${options}</select>${pendingFlag}</div></td>
-          <td>${gapBadge}</td>
+          <td>${renderPhaseCell(evt, m, 'prematch')}</td>
+          <td>${renderPhaseCell(evt, m, 'inplay')}</td>
         </tr>
-        ${mExpanded ? `<tr class="selection-detail-row"><td colspan="4">${renderSelectionsForMarket(m, eff.value)}</td></tr>` : ''}`;
+        ${mExpanded ? `<tr class="selection-detail-row"><td colspan="4">${renderSelectionsForMarket(m, currentProviderId)}</td></tr>` : ''}`;
       }).join('')}
     </tbody>
   </table>`;
@@ -1299,11 +1315,13 @@ document.getElementById('eo-save').addEventListener('click', ()=>{
     }
   });
   Object.entries(moPending).forEach(([key, val])=>{
-    const [id, mt] = key.split(':');
+    const [id, mt, phase] = key.split(':');
     const m = (EVENT_MARKETS[id]||[]).find(x=>x.marketType===mt);
     if (!m) return;
-    m.override = val || null;
-    logAudit('Level 2 — Event Overrides','Market override changed',`${id}: ${mt} → ${val?providerById(val).name:'Default (revert)'}`);
+    if (!m.override) m.override = { prematch:null, inplay:null };
+    m.override[phase] = val || null;
+    const label = phase==='prematch' ? 'Pre-Match' : 'In-Play';
+    logAudit('Level 2 — Event Overrides','Market override changed',`${id}: ${mt} (${label}) → ${val?providerById(val).name:'Default (revert)'}`);
   });
   const n = Object.keys(eoPending).length + Object.keys(moPending).length;
   const anyUnmapped = entries.some(e=>!e.mapped);
@@ -1344,9 +1362,9 @@ document.getElementById('eo-save').addEventListener('click', ()=>{
     const sel = e.target.closest('select[data-mkt-override]');
     if (!sel) return;
     const key = sel.dataset.mktOverride;
-    const [evtId, mt] = key.split(':');
+    const [evtId, mt, phase] = key.split(':');
     const m = (EVENT_MARKETS[evtId]||[]).find(x=>x.marketType===mt);
-    const committed = m && m.override ? m.override : '';
+    const committed = (m && m.override && m.override[phase]) ? m.override[phase] : '';
     if ((sel.value||'') === committed) delete moPending[key]; else moPending[key] = sel.value || null;
     renderEventsTable();
   });
@@ -1367,8 +1385,13 @@ function updateEoSelectAllCheckbox(){
 }
 function updateEoBulkBar(){
   const bar = document.getElementById('eo-bulk-bar');
-  bar.classList.toggle('open', eoSelectedEvents.size>0);
-  document.getElementById('eo-bulk-count').textContent = eoSelectedEvents.size;
+  const n = eoSelectedEvents.size;
+  bar.classList.toggle('open', n>0);
+  document.getElementById('eo-bulk-label').textContent = n>0 ? `${n} event(s) selected` : 'Check events below (✓) to enable bulk actions';
+  document.getElementById('eo-bulk-label').classList.toggle('bulk-bar__hint', n===0);
+  ['eo-bulk-prematch','eo-bulk-inplay','eo-bulk-apply','eo-bulk-clear-overrides'].forEach(id=>{
+    document.getElementById(id).disabled = n===0;
+  });
 }
 function populateEoBulkSelects(){
   const opts = `<option value="">Use default</option>` + PROVIDERS.map(p=>`<option value="${p.id}">${p.name}</option>`).join('');
@@ -1394,20 +1417,22 @@ document.getElementById('eo-bulk-clear').addEventListener('click', ()=>{ eoSelec
 populateEoBulkSelects();
 document.getElementById('eo-export').addEventListener('click', ()=>{
   const events = filteredEvents();
-  const headers = ['Event ID','Event Name','Sport','Competition','Start','Status','Market Type','Effective Provider','Manual Override?','Gap-Filled?','Carriers'];
+  const headers = ['Event ID','Event Name','Sport','Competition','Start','Status','Market Type',
+    'Pre-Match Provider','Pre-Match Gap?','In-Play Provider','In-Play Gap?','Carriers'];
   const rows = [];
   events.forEach(evt=>{
     const markets = EVENT_MARKETS[evt.id] || [];
     if (!markets.length){
-      rows.push([evt.id, evt.name, sportName(evt.sport), competitionName(evt.competition), fmtDate(evt.start), evt.status, '', '', '', '', '']);
+      rows.push([evt.id, evt.name, sportName(evt.sport), competitionName(evt.competition), fmtDate(evt.start), evt.status, '', '', '', '', '', '']);
       return;
     }
     markets.forEach(m=>{
-      const key = moKey(evt.id, m.marketType);
-      const ownOverride = (key in moPending) ? moPending[key] : m.override;
-      const eff = effectiveMarketProvider(evt, m);
+      const pre = effectiveMarketProvider(evt, m, 'prematch');
+      const inp = effectiveMarketProvider(evt, m, 'inplay');
       rows.push([evt.id, evt.name, sportName(evt.sport), competitionName(evt.competition), fmtDate(evt.start), evt.status,
-        m.marketType, eff.value ? providerById(eff.value).name : 'No coverage', ownOverride ? 'Yes' : 'No', eff.isGap ? 'Yes' : 'No',
+        m.marketType,
+        pre.value ? providerById(pre.value).name : 'No coverage', pre.isGap ? 'Yes' : 'No',
+        inp.value ? providerById(inp.value).name : 'No coverage', inp.isGap ? 'Yes' : 'No',
         m.carrierIds.map(pid=>providerById(pid).name).join(' | ')]);
     });
   });
@@ -1603,8 +1628,9 @@ function computeCoverageGaps(){
   EVENTS.forEach(evt=>{
     const sport = sportByCompetitionId(evt.competition);
     const comp = sport.competitions.find(c=>c.id===evt.competition);
+    const phase = evt.status === 'in-play' ? 'inplay' : 'prematch';
     (EVENT_MARKETS[evt.id]||[]).forEach(m=>{
-      const eff = effectiveMarketProvider(evt, m);
+      const eff = effectiveMarketProvider(evt, m, phase);
       if (!eff.isGap) return;
       gaps.push({
         sportName: sport.name, competitionName: comp.name, eventName: evt.name, eventId: evt.id,

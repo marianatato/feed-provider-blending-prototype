@@ -6,7 +6,7 @@
 <title>Feed Provider Blending &amp; Integration Platform</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Murecho:wght@600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=18">
+<link rel="stylesheet" href="styles.css?v=19">
 </head>
 <body>
 <!-- ============ SVG SPRITE — Lucide icons, Ivory stroke scale ============ -->
@@ -126,7 +126,7 @@
       </div>
 
       <div class="bulk-bar" id="mt-bulk-bar">
-        <strong><span id="mt-bulk-count">0</span> market type row(s) selected</strong>
+        <strong id="mt-bulk-label" class="bulk-bar__hint">Check market type rows below (✓) to enable bulk actions</strong>
         <span class="sep"></span>
         <select class="select input-sm" id="mt-bulk-prematch" style="width:170px;"></select>
         <select class="select input-sm" id="mt-bulk-inplay" style="width:170px;"></select>
@@ -206,7 +206,7 @@
       </div>
 
       <div class="bulk-bar" id="eo-bulk-bar">
-        <strong><span id="eo-bulk-count">0</span> event(s) selected</strong>
+        <strong id="eo-bulk-label" class="bulk-bar__hint">Check events below (✓) to enable bulk actions</strong>
         <span class="sep"></span>
         <select class="select input-sm" id="eo-bulk-prematch" style="width:190px;"></select>
         <select class="select input-sm" id="eo-bulk-inplay" style="width:190px;"></select>
@@ -644,8 +644,8 @@
   <div class="ai-messages" id="docs-body" style="display:block;"></div>
 </div>
 
-<script src="data.js?v=18"></script>
-<script src="docs.js?v=18"></script>
-<script src="app.js?v=18"></script>
+<script src="data.js?v=19"></script>
+<script src="docs.js?v=19"></script>
+<script src="app.js?v=19"></script>
 </body>
 </html>
