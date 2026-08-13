@@ -6,7 +6,7 @@
 <title>Feed Provider Blending &amp; Integration Platform</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Murecho:wght@600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=14">
+<link rel="stylesheet" href="styles.css?v=18">
 </head>
 <body>
 <!-- ============ SVG SPRITE — Lucide icons, Ivory stroke scale ============ -->
@@ -34,6 +34,7 @@
   <symbol id="ic-arrow-right" viewBox="0 0 24 24"><path d="M5 12h14M13 5l7 7-7 7"/></symbol>
   <symbol id="ic-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
   <symbol id="ic-bot" viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="10" rx="2"/><circle cx="12" cy="5" r="2"/><path d="M12 7v4M8 16v0M16 16v0"/></symbol>
+  <symbol id="ic-tag" viewBox="0 0 24 24"><path d="M12.6 2H4a2 2 0 0 0-2 2v8.6a2 2 0 0 0 .6 1.4l9 9a2 2 0 0 0 2.8 0l7.6-7.6a2 2 0 0 0 0-2.8l-9-9a2 2 0 0 0-1.4-.6z"/><circle cx="7.5" cy="7.5" r="1.5"/></symbol>
 </svg>
 
 <div class="app-shell">
@@ -124,6 +125,17 @@
         </div>
       </div>
 
+      <div class="bulk-bar" id="mt-bulk-bar">
+        <strong><span id="mt-bulk-count">0</span> market type row(s) selected</strong>
+        <span class="sep"></span>
+        <select class="select input-sm" id="mt-bulk-prematch" style="width:170px;"></select>
+        <select class="select input-sm" id="mt-bulk-inplay" style="width:170px;"></select>
+        <select class="select input-sm" id="mt-bulk-secondary" style="width:170px;"></select>
+        <button class="btn btn-sm btn-primary" id="mt-bulk-apply">Apply to selected</button>
+        <button class="btn btn-sm btn-destructive" id="mt-bulk-remove">Remove selected</button>
+        <button class="btn btn-sm btn-tertiary" id="mt-bulk-clear" style="margin-left:auto;">Clear selection</button>
+      </div>
+
       <div class="tree card" role="treegrid" aria-label="Provider blending hierarchy">
         <div class="tree-scroll">
           <div class="tree-inner">
@@ -189,7 +201,18 @@
         </select>
         <div class="toolbar__actions">
           <button class="btn btn-sm btn-tertiary" id="eo-presets-btn">Filter presets</button>
+          <button class="btn btn-sm btn-tertiary" id="eo-export">Export CSV</button>
         </div>
+      </div>
+
+      <div class="bulk-bar" id="eo-bulk-bar">
+        <strong><span id="eo-bulk-count">0</span> event(s) selected</strong>
+        <span class="sep"></span>
+        <select class="select input-sm" id="eo-bulk-prematch" style="width:190px;"></select>
+        <select class="select input-sm" id="eo-bulk-inplay" style="width:190px;"></select>
+        <button class="btn btn-sm btn-primary" id="eo-bulk-apply">Apply to selected</button>
+        <button class="btn btn-sm btn-tertiary" id="eo-bulk-clear-overrides">Clear overrides</button>
+        <button class="btn btn-sm btn-tertiary" id="eo-bulk-clear" style="margin-left:auto;">Clear selection</button>
       </div>
 
       <div class="card">
@@ -197,6 +220,8 @@
           <table class="data-table">
             <thead>
               <tr>
+                <th style="width:28px;"><span class="checkbox" id="eo-select-all"></span></th>
+                <th style="width:22px;"></th>
                 <th>Event</th>
                 <th>Competition</th>
                 <th>Start</th>
@@ -264,14 +289,21 @@
       </div>
 
       <div class="tab-panel" id="tab-coverage">
-        <div class="grid-2" style="align-items:stretch;">
-          <div class="card card-pad">
-            <h3 style="font-size:13px;margin-bottom:12px;">Coverage % — served vs. assigned</h3>
-            <div id="coverage-gauges" class="flex-gap-3" style="justify-content:space-between;"></div>
+        <div class="card card-pad" style="margin-bottom:12px;">
+          <h3 style="font-size:13px;margin-bottom:12px;">Coverage % — served vs. assigned</h3>
+          <div id="coverage-gauges" class="flex-gap-3" style="justify-content:space-between;"></div>
+        </div>
+        <div class="card card-pad">
+          <div class="flex-between" style="margin-bottom:12px;">
+            <h3 style="font-size:13px;">Coverage gaps <span class="muted" style="font-weight:400;">(<span id="coverage-gaps-count">0</span>)</span></h3>
+            <button class="btn btn-sm btn-tertiary" id="coverage-gaps-export">Export CSV</button>
           </div>
-          <div class="card card-pad">
-            <h3 style="font-size:13px;margin-bottom:12px;">Coverage gaps</h3>
-            <div id="coverage-gaps-list"></div>
+          <p class="muted" style="font-size:11px;margin:-6px 0 10px;">Every event/market where the assigned provider had no content, so the system had to blend in another provider — or, if none carries it, is left uncovered.</p>
+          <div style="overflow:auto;max-height:360px;">
+            <table class="data-table">
+              <thead><tr><th>Sport</th><th>Competition</th><th>Event</th><th>Market Type</th><th>Assigned Provider</th><th>Filled By</th><th>Severity</th></tr></thead>
+              <tbody id="coverage-gaps-tbody"></tbody>
+            </table>
           </div>
         </div>
       </div>
@@ -612,8 +644,8 @@
   <div class="ai-messages" id="docs-body" style="display:block;"></div>
 </div>
 
-<script src="data.js?v=14"></script>
-<script src="docs.js?v=14"></script>
-<script src="app.js?v=14"></script>
+<script src="data.js?v=18"></script>
+<script src="docs.js?v=18"></script>
+<script src="app.js?v=18"></script>
 </body>
 </html>

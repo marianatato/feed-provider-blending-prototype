@@ -149,6 +149,45 @@ function goToMappingFor(providerId, sportId, competitionId, matchType){
   }
 }
 
+// Same idea as mapWarningHtml/goToMappingFor, but for Market Type (bet-type)
+// rows added under a Group/Competition in Blending Config — these are
+// sport-wide mappings (see SPORT_MARKET_TYPES), so the fix-it link always
+// routes to the Market Types sub-tab, never a competition record.
+function mtWarningHtml(providerId, sportId, marketType){
+  const provider = providerById(providerId);
+  const providerLabel = provider ? provider.name : 'This provider';
+  const mtArg = marketType.replace(/'/g, "\\'");
+  return `<span class="map-warning">
+    ${ic('triangle-alert', 16, 'map-warning__icon')}
+    <div class="map-tooltip">
+      <strong>Not mapped to GTH</strong>
+      <p>${providerLabel} isn't mapped to <b>${sportName(sportId)} — ${marketType}</b> in the internal hierarchy — it can't be used here until that's resolved.</p>
+      <a onclick="event.stopPropagation(); goToMarketTypeMappingFor('${providerId}','${sportId}','${mtArg}')">Fix this mapping →</a>
+    </div>
+  </span>`;
+}
+function goToMarketTypeMappingFor(providerId, sportId, marketType){
+  const rec = GTH_MAPPINGS.find(m=> m.provider === providerId && m.status === 'suggested' && m.level === 'marketType' && m.suggestion.sportId === sportId && m.suggestion.marketType === marketType);
+  goToView('mappings');
+  if (rec){
+    const state = getTableState('suggested');
+    state.text = marketType;
+    state.provider = providerId;
+    document.getElementById('sugg-search').value = state.text;
+    document.getElementById('sugg-provider').value = providerId;
+    renderSuggestedTab();
+    document.getElementById('mappings-suggestions').scrollIntoView({behavior:'smooth', block:'nearest'});
+  } else {
+    document.querySelector('#view-mappings .tab[data-tab="unmapped"]').click();
+    setMappingLevel('unmapped','marketType');
+    const state = getTableState('unmapped-markettypes');
+    state.colFilters = state.colFilters || {};
+    state.colFilters.providerSport = sportName(sportId);
+    state.colFilters.providerMarketType = marketType;
+    renderUnmappedMtTab();
+  }
+}
+
 /* ============================================================
    NAV / VIEW SWITCHING + CONTEXT-AWARE HEADER SEARCH
    ============================================================ */
@@ -215,6 +254,7 @@ document.querySelector('.main').addEventListener('click', e=>{
   const panelWrap = tabbar.parentElement;
   panelWrap.querySelectorAll(':scope > .tab-panel').forEach(p=>p.classList.remove('active'));
   panelWrap.querySelector('#tab-'+tab.dataset.tab).classList.add('active');
+  if (tab.dataset.tab === 'coverage') renderCoverage();
 });
 
 /* Theme toggle */
@@ -241,6 +281,8 @@ const pendingHierarchy = {};
 const openTreeNodes = new Set();
 let bcProviderFilter = '';
 let bcSuppressAutoExpand = false;
+// Bulk-select for Market Type rows — composite keys `${level}:${nodeId}:${marketType}`
+const bcMtSelected = new Set();
 
 function sourceLabel(src){
   if (src==='own') return 'Explicit';
@@ -291,12 +333,47 @@ function resolveSecondary(sportId, compId){
   return { value:globalVal, source:'global' };
 }
 
-function resolveMarketType(sportId, compId, marketType, phase){
-  const key = `${compId}:${marketType}`;
-  const mtKey = `mt:${key}:${phase}`;
-  const mtVal = pendingOr(mtKey, MARKET_TYPE_DEFAULTS[key]?.[phase] ?? null);
-  if (mtVal) return { value:mtVal, source:'own' };
-  return resolveProvider(sportId, compId, phase);
+// A market type row's own cascade parent: a Competition row falls back to
+// the full Global→Sport→Group→Competition cascade; a Group row falls back
+// to Sport→Global only (it has no single competition to inherit from).
+function resolveSportOrGlobal(sportId, phase){
+  const sport = SPORTS.find(s=>s.id===sportId);
+  const sportVal = pendingOr(`sport:${sportId}:${phase}`, sport[phase]);
+  if (sportVal) return { value:sportVal, source:'sport' };
+  const globalVal = pendingOr(`global:${phase}`, GLOBAL_DEFAULT[phase]);
+  return { value:globalVal, source:'global' };
+}
+function resolveSportOrGlobalSecondary(sportId){
+  const sport = SPORTS.find(s=>s.id===sportId);
+  const sportVal = pendingOr(`secondary:sport:${sportId}`, sport.secondary);
+  if (sportVal) return { value:sportVal, source:'sport' };
+  const globalVal = pendingOr('secondary:global', GLOBAL_DEFAULT.secondary);
+  return { value:globalVal, source:'global' };
+}
+function marketTypeParentProvider(level, sportId, compId, phase){
+  return level === 'comp' ? resolveProvider(sportId, compId, phase).value : resolveSportOrGlobal(sportId, phase).value;
+}
+function marketTypeParentSecondary(level, sportId, compId){
+  return level === 'comp' ? resolveSecondary(sportId, compId).value : resolveSportOrGlobalSecondary(sportId).value;
+}
+function resolveMarketTypeProvider(level, nodeId, sportId, compId, marketType, phase){
+  const key = `${level}:${nodeId}:${marketType}`;
+  const own = pendingOr(`mtval:${key}:${phase}`, MARKET_TYPE_DEFAULTS[key]?.[phase] ?? null);
+  if (own) return { value:own, source:'own' };
+  const parentVal = marketTypeParentProvider(level, sportId, compId, phase);
+  return { value:parentVal, source:'parent' };
+}
+function resolveMarketTypeSecondary(level, nodeId, sportId, compId, marketType){
+  const key = `${level}:${nodeId}:${marketType}`;
+  const own = pendingOr(`mtsec:${key}`, MARKET_TYPE_DEFAULTS[key]?.secondary ?? null);
+  if (own) return { value:own, source:'own' };
+  const parentVal = marketTypeParentSecondary(level, sportId, compId);
+  return { value:parentVal, source:'parent' };
+}
+// Market type rows that exist (have been explicitly added) at a node.
+function marketTypeRowsFor(level, nodeId){
+  const prefix = `${level}:${nodeId}:`;
+  return Object.keys(MARKET_TYPE_DEFAULTS).filter(k=>k.startsWith(prefix)).map(k=>k.slice(prefix.length));
 }
 
 // Backward-compat wrappers used by effectiveEventProvider and other tabs
@@ -396,6 +473,60 @@ function treeRowSelects(keys, values, inheritLabels, isPendingArr){
     </select>`;
 }
 
+// --- Market Type rows — plain tree-grid rows, same style as Sport/Group/
+// Competition rows (just a different icon), added under a Group or a
+// Competition node. `depth` matches the CSS grid indent to use.
+function renderMarketTypeRows(level, nodeId, sportId, compId, depth){
+  const marketTypes = marketTypeRowsFor(level, nodeId);
+  const allTypes = SPORT_MARKET_TYPES[sportId] || [];
+  const available = allTypes.filter(mt=> !marketTypes.includes(mt));
+  const rowsHtml = marketTypes.map(mt=>{
+    const key = `${level}:${nodeId}:${mt}`;
+    const rec = MARKET_TYPE_DEFAULTS[key] || {};
+    const ownPre = pendingOr(`mtval:${key}:prematch`, rec.prematch ?? null);
+    const ownInp = pendingOr(`mtval:${key}:inplay`, rec.inplay ?? null);
+    const ownSec = pendingOr(`mtsec:${key}`, rec.secondary ?? null);
+    const parentPre = marketTypeParentProvider(level, sportId, compId, 'prematch');
+    const parentInp = marketTypeParentProvider(level, sportId, compId, 'inplay');
+    const parentSec = marketTypeParentSecondary(level, sportId, compId);
+    const effPre = ownPre || parentPre;
+    const effInp = ownInp || parentInp;
+    const isPending = [`mtval:${key}:prematch`,`mtval:${key}:inplay`,`mtsec:${key}`].some(k=>k in pendingHierarchy);
+    const checked = bcMtSelected.has(key);
+    const preMapped = isMarketTypeMapped(effPre, sportId, mt);
+    const inpMapped = isMarketTypeMapped(effInp, sportId, mt);
+    const warn = !preMapped ? mtWarningHtml(effPre, sportId, mt) : (!inpMapped ? mtWarningHtml(effInp, sportId, mt) : '');
+    return `
+    <div class="tree-row tree-row--markettype ${isPending?'tree-row--pending':''}" style="--depth:${depth}" role="row" aria-level="${depth}">
+      <div class="tree-row__lead">
+        <span class="checkbox ${checked?'checked':''}" data-mt-check="${key}">${checked?ICONS.check():''}</span>
+        ${ic('tag', 16, 'style="color:var(--fg-muted)"')}
+        <span class="name" title="${mt}">${mt}</span>
+      </div>
+      <select class="select input-sm" data-key="mtval:${key}:prematch">${providerOptions(ownPre, true, inheritLabel(parentPre))}</select>
+      <select class="select input-sm" data-key="mtval:${key}:inplay">${providerOptions(ownInp, true, inheritLabel(parentInp))}</select>
+      <select class="select input-sm" data-key="mtsec:${key}">${providerOptionsNullable(ownSec, `Inherit · ${providerById(parentSec)?.name||'none'}`)}</select>
+      <div class="tree-cell--source"></div>
+      <div class="tree-cell--contains"></div>
+      <div class="tree-cell--gth">${warn}</div>
+      <div class="tree-cell--state"><span class="leaf-row__remove" data-mt-remove="${key}" title="Remove market type row">${ICONS.x()}</span></div>
+    </div>`;
+  }).join('');
+  const addRow = available.length ? `
+    <div class="tree-row tree-row--markettype tree-row--add" style="--depth:${depth}" role="row" aria-level="${depth}">
+      <div class="tree-row__lead">
+        ${ic('plus', 16, 'style="color:var(--fg-muted)"')}
+        <select class="select input-sm" data-mt-add-select="${level}:${nodeId}" style="width:auto;flex:1;">
+          <option value="">Add market type…</option>
+          ${available.map(mt=>`<option value="${mt}">${mt}</option>`).join('')}
+        </select>
+      </div>
+      <div></div><div></div><div></div><div></div><div></div><div></div>
+      <div class="tree-cell--state"><button class="btn btn-sm btn-tertiary" data-mt-add-btn="${level}:${nodeId}">Add</button></div>
+    </div>` : '';
+  return rowsHtml + addRow;
+}
+
 // --- Render the full hierarchy tree --------------------------------------
 function renderHierarchyTree(){
   const root = document.getElementById('hierarchy-tree');
@@ -453,14 +584,15 @@ function renderHierarchyTree(){
       const bestSource = [effPre.source, effInp.source].includes('own') ? 'Explicit'
         : [effPre.source, effInp.source].includes('group') ? '↑ Group'
         : [effPre.source, effInp.source].includes('sport') ? '↑ Sport' : '↑ Global';
+      const compOpen = openTreeNodes.has('comp-'+comp.id) || autoExpand;
 
       return `
       <div class="tree-node">
-        <div class="tree-row ${compPending?'tree-row--pending':''}"
-             style="--depth:${depth}"
-             role="row" aria-level="${depth}">
+        <div class="tree-row ${compOpen?'open':''} ${compPending?'tree-row--pending':''}"
+             data-toggle="comp-${comp.id}" style="--depth:${depth}"
+             role="row" aria-level="${depth}" aria-expanded="${compOpen}">
           <div class="tree-row__lead">
-            <span class="ic ic-16" style="width:12px"></span>${ICONS.competitionIcon()}
+            ${ICONS.chevron()}${ICONS.competitionIcon()}
             <span class="name" title="${comp.name}">${comp.name}</span>
           </div>
           <select class="select input-sm" style="width:100%" data-key="comp:${comp.id}:prematch">
@@ -476,6 +608,9 @@ function renderHierarchyTree(){
           <div class="tree-cell--contains">${comp.events} event${comp.events===1?'':'s'}</div>
           <div class="tree-cell--gth">${!preMapped?mapWarningHtml(effPre.value, sport.id, comp.id, 'prematch'):(!inpMapped?mapWarningHtml(effInp.value, sport.id, comp.id, 'inplay'):'')}</div>
           <div class="tree-cell--state">${compPending?'<span class="badge badge-yellow">unsaved</span>':''}</div>
+        </div>
+        <div class="tree-children ${compOpen?'open':''}" id="comp-${comp.id}">
+          ${renderMarketTypeRows('comp', comp.id, sport.id, comp.id, depth+1)}
         </div>
       </div>`;
     };
@@ -517,6 +652,7 @@ function renderHierarchyTree(){
         </div>
         <div class="tree-children ${grpOpen?'open':''}" id="group-${group.id}">
           ${comps.map(c=>renderComp(c, group, 3)).join('')}
+          ${renderMarketTypeRows('group', group.id, sport.id, null, 3)}
         </div>
       </div>`;
     }).join('');
@@ -568,6 +704,34 @@ function renderHierarchyTree(){
 (function(){
   const root = document.getElementById('hierarchy-tree');
   root.addEventListener('click', e=>{
+    const check = e.target.closest('[data-mt-check]');
+    if (check){
+      const key = check.dataset.mtCheck;
+      if (bcMtSelected.has(key)) bcMtSelected.delete(key); else bcMtSelected.add(key);
+      renderHierarchyTree();
+      return;
+    }
+    const remove = e.target.closest('[data-mt-remove]');
+    if (remove){
+      const key = remove.dataset.mtRemove;
+      delete MARKET_TYPE_DEFAULTS[key];
+      bcMtSelected.delete(key);
+      logAudit('Level 1 — Blending Config', 'Market type row removed', key);
+      renderHierarchyTree();
+      return;
+    }
+    const addBtn = e.target.closest('[data-mt-add-btn]');
+    if (addBtn){
+      const [level, nodeId] = addBtn.dataset.mtAddBtn.split(':');
+      const sel = addBtn.closest('.tree-row').querySelector('[data-mt-add-select]');
+      const mt = sel.value;
+      if (!mt) return;
+      const key = `${level}:${nodeId}:${mt}`;
+      MARKET_TYPE_DEFAULTS[key] = { prematch:null, inplay:null, secondary:null };
+      logAudit('Level 1 — Blending Config', 'Market type row added', key);
+      renderHierarchyTree();
+      return;
+    }
     if (e.target.closest('select, .map-warning, a')) return;
     const row = e.target.closest('[data-toggle]');
     if (!row) return;
@@ -592,7 +756,44 @@ function updatePendingBar(){
   document.getElementById('bc-save').disabled = n===0;
   document.getElementById('bc-action-bar').classList.toggle('open', n>0);
   document.getElementById('bc-pending-count').textContent = n;
+  updateMtBulkBar();
 }
+
+/* ---- Market Type row bulk actions (select rows across the tree) -------- */
+function populateMtBulkSelects(){
+  const opts = `<option value="">Clear (inherit)</option>` + PROVIDERS.map(p=>`<option value="${p.id}">${p.name}</option>`).join('');
+  document.getElementById('mt-bulk-prematch').innerHTML = `<option value="__nochange">Pre-Match: no change</option>${opts}`;
+  document.getElementById('mt-bulk-inplay').innerHTML = `<option value="__nochange">In-Play: no change</option>${opts}`;
+  document.getElementById('mt-bulk-secondary').innerHTML = `<option value="__nochange">Secondary: no change</option>${opts}`;
+}
+function updateMtBulkBar(){
+  const bar = document.getElementById('mt-bulk-bar');
+  const n = bcMtSelected.size;
+  bar.classList.toggle('open', n>0);
+  document.getElementById('mt-bulk-count').textContent = n;
+}
+document.getElementById('mt-bulk-apply').addEventListener('click', ()=>{
+  const preV = document.getElementById('mt-bulk-prematch').value;
+  const inpV = document.getElementById('mt-bulk-inplay').value;
+  const secV = document.getElementById('mt-bulk-secondary').value;
+  if (preV==='__nochange' && inpV==='__nochange' && secV==='__nochange'){ toast('warning','Nothing to apply','Pick at least one field to change.'); return; }
+  bcMtSelected.forEach(key=>{
+    if (preV !== '__nochange') pendingHierarchy[`mtval:${key}:prematch`] = preV || null;
+    if (inpV !== '__nochange') pendingHierarchy[`mtval:${key}:inplay`] = inpV || null;
+    if (secV !== '__nochange') pendingHierarchy[`mtsec:${key}`] = secV || null;
+  });
+  toast('success', 'Staged', `${bcMtSelected.size} market type row(s) updated — review and Save changes.`);
+  renderHierarchyTree();
+});
+document.getElementById('mt-bulk-remove').addEventListener('click', ()=>{
+  const n = bcMtSelected.size;
+  bcMtSelected.forEach(key=>{ delete MARKET_TYPE_DEFAULTS[key]; logAudit('Level 1 — Blending Config','Market type row removed', key); });
+  bcMtSelected.clear();
+  toast('default', 'Removed', `${n} market type row(s) removed.`);
+  renderHierarchyTree();
+});
+document.getElementById('mt-bulk-clear').addEventListener('click', ()=>{ bcMtSelected.clear(); renderHierarchyTree(); });
+populateMtBulkSelects();
 document.getElementById('bc-discard').addEventListener('click', ()=>{
   for (const k in pendingHierarchy) delete pendingHierarchy[k];
   renderHierarchyTree();
@@ -657,10 +858,11 @@ document.getElementById('bc-save').addEventListener('click', ()=>{
       const parts = key.split(':');
       const compId = parts[1];
       if (!isMapped(providerId, compId)) unmapped.push({providerId, path:`${providerById(providerId).name} → ${competitionName(compId)}`});
-    } else if (key.startsWith('mt:')){
+    } else if (key.startsWith('mtval:') || key.startsWith('mtsec:')){
       const parts = key.split(':');
-      const compId = parts[1];
-      if (!isMapped(providerId, compId)) unmapped.push({providerId, path:`${providerById(providerId).name} → ${competitionName(compId)} → ${parts[2]}`});
+      const level = parts[1], nodeId = parts[2], marketType = parts[3];
+      const sportId = level==='comp' ? sportByCompetitionId(nodeId).id : nodeId;
+      if (!isMarketTypeMapped(providerId, sportId, marketType)) unmapped.push({providerId, path:`${providerById(providerId).name} → ${sportName(sportId)} → ${marketType}`});
     }
   });
   if (unmapped.length){
@@ -695,14 +897,18 @@ document.getElementById('bc-save').addEventListener('click', ()=>{
       else if (rest.startsWith('sport:')) SPORTS.find(s=>s.id===rest.split(':')[1]).secondary = val;
       else if (rest.startsWith('group:')){ const g=GROUPS.find(g=>g.id===rest.split(':')[1]); if(g) g.secondary=val; }
       else if (rest.startsWith('comp:')) SPORTS.flatMap(s=>s.competitions).find(c=>c.id===rest.split(':')[1]).secondary = val;
-    } else if (key.startsWith('mt:')){
-      const parts = key.slice(3).split(':');
-      const compId = parts[0];
-      const marketType = parts.slice(1, -1).join(':');
-      const phase = parts[parts.length-1];
-      const mtKey = `${compId}:${marketType}`;
-      if (!MARKET_TYPE_DEFAULTS[mtKey]) MARKET_TYPE_DEFAULTS[mtKey] = { prematch:null, inplay:null };
+    } else if (key.startsWith('mtval:')){
+      const parts = key.split(':');
+      const level = parts[1], nodeId = parts[2], marketType = parts[3], phase = parts[4];
+      const mtKey = `${level}:${nodeId}:${marketType}`;
+      if (!MARKET_TYPE_DEFAULTS[mtKey]) MARKET_TYPE_DEFAULTS[mtKey] = { prematch:null, inplay:null, secondary:null };
       MARKET_TYPE_DEFAULTS[mtKey][phase] = val;
+    } else if (key.startsWith('mtsec:')){
+      const parts = key.split(':');
+      const level = parts[1], nodeId = parts[2], marketType = parts[3];
+      const mtKey = `${level}:${nodeId}:${marketType}`;
+      if (!MARKET_TYPE_DEFAULTS[mtKey]) MARKET_TYPE_DEFAULTS[mtKey] = { prematch:null, inplay:null, secondary:null };
+      MARKET_TYPE_DEFAULTS[mtKey].secondary = val;
     }
   });
   Object.keys(pendingHierarchy).forEach(k=>delete pendingHierarchy[k]);
@@ -831,6 +1037,38 @@ const eoPending = {};
 let eoCustomRange = null; // { from:Date, to:Date } when the range filter is 'custom'
 function eoKey(id, mt){ return `${id}:${mt}`; }
 
+// -- Market / selection drill-down (per-event, per-market-type) -----------
+const moPending = {};              // key: `${eventId}:${marketType}` -> providerId|null
+const eoExpandedEvents = new Set();   // event ids with markets shown
+const eoExpandedMarkets = new Set();  // `${eventId}:${marketType}` with selections shown
+const eoSelectedEvents = new Set();    // bulk-select on the main events table
+function moKey(evtId, mt){ return `${evtId}:${mt}`; }
+
+// The provider that would serve this event's markets by default — its
+// Pre-Match or In-Play effective provider, whichever matches current status.
+function marketAssignedProvider(evt){
+  const phase = evt.status === 'in-play' ? 'inplay' : 'prematch';
+  return effectiveEventProvider(evt, phase).value;
+}
+// Resolves a market's serving provider ignoring any pending (unsaved) override.
+function marketBaseEffective(evt, market){
+  const assigned = marketAssignedProvider(evt);
+  if (market.override) return { value: market.override, isGap: !market.carrierIds.includes(market.override), source:'override' };
+  if (market.carrierIds.includes(assigned)) return { value: assigned, isGap:false, source:'default' };
+  if (market.carrierIds.length) return { value: market.carrierIds[0], isGap:true, source:'blend' };
+  return { value:null, isGap:true, source:'none' };
+}
+// Same as above but accounts for a staged (unsaved) market-level override.
+function effectiveMarketProvider(evt, market){
+  const pk = moKey(evt.id, market.marketType);
+  if (pk in moPending){
+    const v = moPending[pk];
+    if (v) return { value:v, isGap: !market.carrierIds.includes(v), source:'override', pending:true };
+    return { ...marketBaseEffective(evt, { ...market, override:null }), pending:true };
+  }
+  return { ...marketBaseEffective(evt, market), pending:false };
+}
+
 function populateEventFilters(){
   const sportSel = document.getElementById('eo-filter-sport');
   SPORTS.forEach(s=> sportSel.innerHTML += `<option value="${s.id}">${s.name}</option>`);
@@ -929,8 +1167,12 @@ function renderEventsTable(){
       : rangeSel.options[rangeSel.selectedIndex].text;
   document.getElementById('events-tbody').innerHTML = rows.map(e=>{
     const overridden = eventOverridden(e);
-    return `
+    const expanded = eoExpandedEvents.has(e.id);
+    const checked = eoSelectedEvents.has(e.id);
+    const mainRow = `
     <tr data-evt="${e.id}" class="${overridden?'row-override':''}">
+      <td><span class="checkbox ${checked?'checked':''}" data-eo-check="${e.id}">${checked?ICONS.check():''}</span></td>
+      <td><span class="eo-expand-btn ${expanded?'open':''}" data-eo-expand="${e.id}">${ic('chevron-right',12)}</span></td>
       <td><strong>${e.name}</strong><br><span class="mono">${e.id}</span></td>
       <td>${competitionName(e.competition)}</td>
       <td>${fmtDate(e.start)}<br><span class="muted" style="font-size:11px;">${relTime(e.start)}</span></td>
@@ -938,8 +1180,69 @@ function renderEventsTable(){
       <td>${inlineProviderSelect(e,'prematch')}</td>
       <td>${inlineProviderSelect(e,'inplay')}</td>
     </tr>`;
-  }).join('') || `<tr><td colspan="6"><div class="empty-state">No events match these filters.</div></td></tr>`;
+    const detailRow = expanded ? `<tr class="market-detail-row"><td colspan="8">${renderMarketsForEvent(e)}</td></tr>` : '';
+    return mainRow + detailRow;
+  }).join('') || `<tr><td colspan="8"><div class="empty-state">No events match these filters.</div></td></tr>`;
   updateEoPendingBar();
+  updateEoBulkBar();
+  updateEoSelectAllCheckbox();
+}
+
+// Markets for one event — current (effective) provider per market type,
+// changeable; expands further into a read-only selection/price comparison.
+function renderMarketsForEvent(evt){
+  const markets = EVENT_MARKETS[evt.id] || [];
+  if (!markets.length) return `<div class="empty-state" style="padding:var(--sp-3)">No market data for this event.</div>`;
+  return `
+  <table class="market-table">
+    <thead><tr><th style="width:20px;"></th><th>Market Type</th><th style="width:210px;">Current Provider</th><th style="width:110px;"></th></tr></thead>
+    <tbody>
+      ${markets.map(m=>{
+        const key = moKey(evt.id, m.marketType);
+        const ownOverride = (key in moPending) ? moPending[key] : m.override;
+        const base = marketBaseEffective(evt, { ...m, override:null });
+        const eff = effectiveMarketProvider(evt, m);
+        const mExpanded = eoExpandedMarkets.has(key);
+        const baseLabel = base.value ? providerById(base.value).name : 'no coverage';
+        const options = `<option value="">Use default (${baseLabel})</option>` +
+          PROVIDERS.map(p=>`<option value="${p.id}" ${ownOverride===p.id?'selected':''}>${p.name}</option>`).join('');
+        const pendingFlag = (key in moPending) ? '<span class="badge badge-yellow" style="margin-left:6px;">unsaved</span>' : '';
+        const gapBadge = !eff.isGap ? '<span class="badge badge-gray">Default</span>'
+          : (eff.value ? '<span class="badge badge-yellow">Blended</span>' : '<span class="badge badge-red">No coverage</span>');
+        return `
+        <tr class="market-row ${eff.isGap?'market-row--gap':''}">
+          <td><span class="eo-expand-btn ${mExpanded?'open':''}" data-mkt-expand="${key}">${ic('chevron-right',12)}</span></td>
+          <td>${m.marketType}</td>
+          <td><div class="flex-gap-1"><select class="select input-sm" style="width:170px;" data-mkt-override="${key}">${options}</select>${pendingFlag}</div></td>
+          <td>${gapBadge}</td>
+        </tr>
+        ${mExpanded ? `<tr class="selection-detail-row"><td colspan="4">${renderSelectionsForMarket(m, eff.value)}</td></tr>` : ''}`;
+      }).join('')}
+    </tbody>
+  </table>`;
+}
+
+// Read-only selection/price comparison across every provider carrying this
+// market — no provider-change allowed at this level, only side-by-side prices.
+function renderSelectionsForMarket(market, currentProviderId){
+  if (!market.carrierIds.length){
+    return `<div class="alert alert-error" style="margin:8px 0;">${ICONS.alert()}<div>No provider currently carries this market — there are no prices to compare.</div></div>`;
+  }
+  return `
+  <table class="selection-table">
+    <thead><tr><th>Selection</th>${market.carrierIds.map(pid=>`<th>${providerById(pid).name}</th>`).join('')}</tr></thead>
+    <tbody>
+      ${market.selections.map(sel=>`
+        <tr>
+          <td>${sel.name}</td>
+          ${market.carrierIds.map(pid=>{
+            const price = sel.prices[pid];
+            const cls = pid===currentProviderId ? 'price-current' : (price==null ? 'price-none' : '');
+            return `<td class="${cls}">${price!=null ? price.toFixed(2) : '—'}</td>`;
+          }).join('')}
+        </tr>`).join('')}
+    </tbody>
+  </table>`;
 }
 
 // Stage a single-event, single-slot change — nothing commits until Save.
@@ -954,13 +1257,13 @@ function onInlineOverrideChange(eventId, matchType, value){
 }
 
 function updateEoPendingBar(){
-  const n = Object.keys(eoPending).length;
+  const n = Object.keys(eoPending).length + Object.keys(moPending).length;
   document.getElementById('eo-pending-count').textContent = n;
   document.getElementById('eo-save').disabled = n===0;
   document.getElementById('eo-action-bar').classList.toggle('open', n>0);
 }
 function eoPendingSummary(){
-  return Object.entries(eoPending).map(([pk, val])=>{
+  const evtEntries = Object.entries(eoPending).map(([pk, val])=>{
     const [id, mt] = pk.split(':');
     const evt = EVENTS.find(e=>e.id===id);
     const label = mt==='prematch' ? 'Pre-Match' : 'In-Play';
@@ -968,9 +1271,17 @@ function eoPendingSummary(){
     const mapped = val ? isMapped(val, evt.competition, mt) : true;
     return { evt, label, target, mapped };
   });
+  const mktEntries = Object.entries(moPending).map(([key, val])=>{
+    const [id, mt] = key.split(':');
+    const evt = EVENTS.find(e=>e.id===id);
+    const target = val ? providerById(val).name : 'Default (revert)';
+    return { evt, label: `Market — ${mt}`, target, mapped:true };
+  });
+  return [...evtEntries, ...mktEntries];
 }
 document.getElementById('eo-discard').addEventListener('click', ()=>{
   for (const k in eoPending) delete eoPending[k];
+  for (const k in moPending) delete moPending[k];
   renderEventsTable();
 });
 document.getElementById('eo-save').addEventListener('click', ()=>{
@@ -987,13 +1298,121 @@ document.getElementById('eo-save').addEventListener('click', ()=>{
       logAudit('Level 2 — Event Overrides','Override cleared',`${evt.id}: ${label} reverted to default`);
     }
   });
-  const n = Object.keys(eoPending).length;
+  Object.entries(moPending).forEach(([key, val])=>{
+    const [id, mt] = key.split(':');
+    const m = (EVENT_MARKETS[id]||[]).find(x=>x.marketType===mt);
+    if (!m) return;
+    m.override = val || null;
+    logAudit('Level 2 — Event Overrides','Market override changed',`${id}: ${mt} → ${val?providerById(val).name:'Default (revert)'}`);
+  });
+  const n = Object.keys(eoPending).length + Object.keys(moPending).length;
   const anyUnmapped = entries.some(e=>!e.mapped);
   for (const k in eoPending) delete eoPending[k];
+  for (const k in moPending) delete moPending[k];
   closeDrawer('drawer-override');
   renderEventsTable();
   if (anyUnmapped) toast('warning','Overrides saved — mapping conflict', `${n} change(s) saved; one or more providers aren't mapped to their competition yet.`);
   else toast('success','Overrides saved', `${n} change(s) applied.`);
+});
+
+/* ---- Market/selection drill-down + bulk actions — delegated listeners --- */
+(function(){
+  const tbody = document.getElementById('events-tbody');
+  tbody.addEventListener('click', e=>{
+    const check = e.target.closest('[data-eo-check]');
+    if (check){
+      const id = check.dataset.eoCheck;
+      if (eoSelectedEvents.has(id)) eoSelectedEvents.delete(id); else eoSelectedEvents.add(id);
+      renderEventsTable();
+      return;
+    }
+    const expand = e.target.closest('[data-eo-expand]');
+    if (expand){
+      const id = expand.dataset.eoExpand;
+      if (eoExpandedEvents.has(id)) eoExpandedEvents.delete(id); else eoExpandedEvents.add(id);
+      renderEventsTable();
+      return;
+    }
+    const mktExpand = e.target.closest('[data-mkt-expand]');
+    if (mktExpand){
+      const key = mktExpand.dataset.mktExpand;
+      if (eoExpandedMarkets.has(key)) eoExpandedMarkets.delete(key); else eoExpandedMarkets.add(key);
+      renderEventsTable();
+    }
+  });
+  tbody.addEventListener('change', e=>{
+    const sel = e.target.closest('select[data-mkt-override]');
+    if (!sel) return;
+    const key = sel.dataset.mktOverride;
+    const [evtId, mt] = key.split(':');
+    const m = (EVENT_MARKETS[evtId]||[]).find(x=>x.marketType===mt);
+    const committed = m && m.override ? m.override : '';
+    if ((sel.value||'') === committed) delete moPending[key]; else moPending[key] = sel.value || null;
+    renderEventsTable();
+  });
+})();
+document.getElementById('eo-select-all').addEventListener('click', ()=>{
+  const rows = filteredEvents();
+  const allSelected = rows.length>0 && rows.every(e=>eoSelectedEvents.has(e.id));
+  if (allSelected) rows.forEach(e=>eoSelectedEvents.delete(e.id));
+  else rows.forEach(e=>eoSelectedEvents.add(e.id));
+  renderEventsTable();
+});
+function updateEoSelectAllCheckbox(){
+  const rows = filteredEvents();
+  const all = rows.length>0 && rows.every(e=>eoSelectedEvents.has(e.id));
+  const el = document.getElementById('eo-select-all');
+  el.classList.toggle('checked', all);
+  el.innerHTML = all ? ICONS.check() : '';
+}
+function updateEoBulkBar(){
+  const bar = document.getElementById('eo-bulk-bar');
+  bar.classList.toggle('open', eoSelectedEvents.size>0);
+  document.getElementById('eo-bulk-count').textContent = eoSelectedEvents.size;
+}
+function populateEoBulkSelects(){
+  const opts = `<option value="">Use default</option>` + PROVIDERS.map(p=>`<option value="${p.id}">${p.name}</option>`).join('');
+  document.getElementById('eo-bulk-prematch').innerHTML = `<option value="__nochange">Pre-Match: no change</option>${opts}`;
+  document.getElementById('eo-bulk-inplay').innerHTML = `<option value="__nochange">In-Play: no change</option>${opts}`;
+}
+document.getElementById('eo-bulk-apply').addEventListener('click', ()=>{
+  const preV = document.getElementById('eo-bulk-prematch').value;
+  const inpV = document.getElementById('eo-bulk-inplay').value;
+  if (preV==='__nochange' && inpV==='__nochange'){ toast('warning','Nothing to apply','Pick at least one field to change.'); return; }
+  eoSelectedEvents.forEach(id=>{
+    if (preV !== '__nochange') onInlineOverrideChange(id, 'prematch', preV);
+    if (inpV !== '__nochange') onInlineOverrideChange(id, 'inplay', inpV);
+  });
+  toast('success', 'Staged', `${eoSelectedEvents.size} event(s) updated — review and Save changes.`);
+});
+document.getElementById('eo-bulk-clear-overrides').addEventListener('click', ()=>{
+  const n = eoSelectedEvents.size;
+  eoSelectedEvents.forEach(id=>{ onInlineOverrideChange(id, 'prematch', ''); onInlineOverrideChange(id, 'inplay', ''); });
+  toast('default', 'Cleared', `Overrides cleared for ${n} event(s) — review and Save changes.`);
+});
+document.getElementById('eo-bulk-clear').addEventListener('click', ()=>{ eoSelectedEvents.clear(); renderEventsTable(); });
+populateEoBulkSelects();
+document.getElementById('eo-export').addEventListener('click', ()=>{
+  const events = filteredEvents();
+  const headers = ['Event ID','Event Name','Sport','Competition','Start','Status','Market Type','Effective Provider','Manual Override?','Gap-Filled?','Carriers'];
+  const rows = [];
+  events.forEach(evt=>{
+    const markets = EVENT_MARKETS[evt.id] || [];
+    if (!markets.length){
+      rows.push([evt.id, evt.name, sportName(evt.sport), competitionName(evt.competition), fmtDate(evt.start), evt.status, '', '', '', '', '']);
+      return;
+    }
+    markets.forEach(m=>{
+      const key = moKey(evt.id, m.marketType);
+      const ownOverride = (key in moPending) ? moPending[key] : m.override;
+      const eff = effectiveMarketProvider(evt, m);
+      rows.push([evt.id, evt.name, sportName(evt.sport), competitionName(evt.competition), fmtDate(evt.start), evt.status,
+        m.marketType, eff.value ? providerById(eff.value).name : 'No coverage', ownOverride ? 'Yes' : 'No', eff.isGap ? 'Yes' : 'No',
+        m.carrierIds.map(pid=>providerById(pid).name).join(' | ')]);
+    });
+  });
+  downloadCSV('event_overrides_markets.csv', headers, rows);
+  toast('success', 'Export ready', `event_overrides_markets.csv — ${rows.length} row(s) across ${events.length} event(s).`);
 });
 // "Review…" — the side drawer lists the staged changes to confirm & apply
 document.getElementById('eo-review').addEventListener('click', ()=>{
@@ -1162,11 +1581,49 @@ function renderCoverage(){
       <div class="muted" style="font-size:11px;margin-top:4px;">${c.servedEvents}/${c.assignedEvents} events</div>
     </div>`;
   }).join('');
-  document.getElementById('coverage-gaps-list').innerHTML = COVERAGE_GAPS.map(g=>`
-    <div class="alert alert-${g.severity==='error'?'error':'warning'}" style="margin-bottom:8px;">
-      ${ICONS.alert()}<div><strong>${g.sport} — ${g.competition}</strong>${g.issue}</div>
-    </div>`).join('') || `<div class="empty-state">No coverage gaps detected.</div>`;
+  const gaps = computeCoverageGaps();
+  document.getElementById('coverage-gaps-count').textContent = gaps.length;
+  document.getElementById('coverage-gaps-tbody').innerHTML = gaps.map(g=>`
+    <tr class="${g.severity==='error'?'row-error':''}">
+      <td>${g.sportName}</td>
+      <td>${g.competitionName}</td>
+      <td>${g.eventName}<br><span class="mono">${g.eventId}</span></td>
+      <td>${g.marketType}</td>
+      <td>${providerById(g.assignedProvider)?.name || '—'}</td>
+      <td>${g.filledBy ? providerBadge(g.filledBy) : '<span class="badge badge-red">No provider</span>'}</td>
+      <td>${g.severity==='error' ? '<span class="badge badge-red">No coverage</span>' : '<span class="badge badge-yellow">Blended</span>'}</td>
+    </tr>`).join('') || `<tr><td colspan="7"><div class="empty-state">No coverage gaps detected.</div></td></tr>`;
 }
+// Exhaustive: every (event, market type) where the assigned provider lacked
+// content, so the system blended in another provider — or, rarely, no
+// provider carries it at all. Reads live off EVENT_MARKETS + the current
+// Level 1/2 cascade, so it always reflects the latest saved configuration.
+function computeCoverageGaps(){
+  const gaps = [];
+  EVENTS.forEach(evt=>{
+    const sport = sportByCompetitionId(evt.competition);
+    const comp = sport.competitions.find(c=>c.id===evt.competition);
+    (EVENT_MARKETS[evt.id]||[]).forEach(m=>{
+      const eff = effectiveMarketProvider(evt, m);
+      if (!eff.isGap) return;
+      gaps.push({
+        sportName: sport.name, competitionName: comp.name, eventName: evt.name, eventId: evt.id,
+        marketType: m.marketType, assignedProvider: marketAssignedProvider(evt),
+        filledBy: eff.value, severity: eff.value ? 'warning' : 'error',
+      });
+    });
+  });
+  return gaps;
+}
+document.getElementById('coverage-gaps-export').addEventListener('click', ()=>{
+  const gaps = computeCoverageGaps();
+  downloadCSV('coverage_gaps.csv',
+    ['Sport','Competition','Event','Event ID','Market Type','Assigned Provider (lacked content)','Filled By','Severity'],
+    gaps.map(g=>[g.sportName, g.competitionName, g.eventName, g.eventId, g.marketType,
+      providerById(g.assignedProvider)?.name || '', g.filledBy ? providerById(g.filledBy).name : 'No provider available',
+      g.severity==='error' ? 'No coverage' : 'Blended']));
+  toast('success', 'Export ready', `coverage_gaps.csv — ${gaps.length} row(s).`);
+});
 
 /* ============================================================
    PROVIDER MAPPINGS (GTH) — unified model

@@ -110,13 +110,16 @@ const GROUPS = [
 function groupForCompetition(compId){ return GROUPS.find(g=>g.competitions.includes(compId))||null; }
 function groupsForSport(sportId){ return GROUPS.filter(g=>g.sportId===sportId); }
 
-// ---- Market-type defaults (per competition, per market type) ------------
-// key: `${competitionId}:${marketTypeName}` → { prematch, inplay }
-// null = inherit from competition level
+// ---- Market-type rows (added ad hoc, at Group or Competition level) -----
+// key: `comp:${competitionId}:${marketTypeName}` or `group:${groupId}:${marketTypeName}`
+// value: { prematch, inplay, secondary } — null = inherit from the node's own cascade value.
+// A row's mere presence here (regardless of whether its fields are set) is
+// what makes it show up as an explicit "market type" line in Blending
+// Configuration — see marketTypeRowsFor() in app.js.
 const MARKET_TYPE_DEFAULTS = {
-  'eb-euroleague:Match Winner':  { prematch:'betradar', inplay:'betgenious' },
-  'eb-euroleague:Total Points Over/Under': { prematch:null, inplay:'betgenious' },
-  'cr-ipl:Match Winner':         { prematch:null, inplay:'betradar' },
+  'comp:eb-euroleague:Match Winner':  { prematch:'betradar', inplay:'betgenious', secondary:null },
+  'comp:eb-euroleague:Total Points Over/Under': { prematch:null, inplay:'betgenious', secondary:null },
+  'comp:cr-ipl:Match Winner':         { prematch:null, inplay:'betradar', secondary:null },
 };
 
 // ---- GTH mapping status per (provider, sport/competition) ------------
@@ -133,6 +136,15 @@ function isMapped(providerId, competitionId, matchType){
   if (UNMAPPED_PROVIDER_HIERARCHY.has(`${providerId}:${competitionId}`)) return false;
   if (matchType && UNMAPPED_PROVIDER_HIERARCHY.has(`${providerId}:${competitionId}:${matchType}`)) return false;
   return true;
+}
+
+// Market Type (bet-type) mapping is sport-wide, not per-competition — see
+// SPORT_MARKET_TYPES. Used to gate provider choices on market-type rows
+// added in Blending Configuration (Group/Competition level).
+function isMarketTypeMapped(providerId, sportId, marketType){
+  if (!providerId) return true;
+  return GTH_MAPPINGS.some(m => m.level==='marketType' && m.status==='active' &&
+    m.provider===providerId && m.gth && m.gth.sportId===sportId && m.gth.marketType===marketType);
 }
 
 // ---- Events (Level 2) --------------------------------------------------
@@ -203,11 +215,6 @@ const COVERAGE = [
   { provider:'inspired', pct:88, servedEvents:22, assignedEvents:25 },
   { provider:'highlight', pct:52, servedEvents:11, assignedEvents:21 },
 ];
-const COVERAGE_GAPS = [
-  { sport:'Cricket', competition:'Caribbean Premier League', issue:'2 events with no provider offering in-play pricing', severity:'warning' },
-  { sport:'eBasketball', competition:'eBasketball Battle', issue:'1 market group (Player Props) uncovered by any mapped provider', severity:'error' },
-];
-
 // ---- Canonical GTH market types, per sport --------------------------------
 // Market Type is a different dimension from Match Type (Pre-Match/In-Play):
 // it's the actual bet type (e.g. "Match Odds"), and it's sport-specific.
@@ -220,6 +227,83 @@ const SPORT_MARKET_TYPES = {
   f1:          ['Race Winner', 'Podium Finish', 'Fastest Lap', 'Head-to-Head Matchup', 'Points Finish (Top 10)'],
   ebasketball: ['Match Winner', 'Handicap', 'Total Points Over/Under', 'First to 20 Points', 'Highest Scoring Half'],
 };
+
+// ---- Per-event market & selection data (Level 2 — market/selection drill-down) --
+// Generated deterministically (seeded on event id) rather than hand-authored,
+// since it's ~13 events × 5 market types × 2-4 selections × up to 4 provider
+// prices — a few hundred data points. Fabricated for the mock; not meant to
+// resemble real market pricing, only to be internally consistent every reload.
+const MARKET_SELECTIONS = {
+  'Match Odds': ['Home', 'Draw', 'Away'],
+  'Both Teams to Score': ['Yes', 'No'],
+  'Total Goals Over/Under': ['Over 2.5', 'Under 2.5'],
+  'Correct Score': ['1-0', '2-1', '1-1'],
+  'Double Chance': ['Home or Draw', 'Draw or Away', 'Home or Away'],
+  'Match Winner': ['Home', 'Away'],
+  'Point Spread': ['Home -5.5', 'Away +5.5'],
+  'Total Points Over/Under': ['Over 165.5', 'Under 165.5'],
+  'Highest Scoring Quarter': ['1st Quarter', '2nd Quarter', '3rd Quarter', '4th Quarter'],
+  'Race to 20 Points': ['Home', 'Away'],
+  'Total Runs Over/Under': ['Over 312.5', 'Under 312.5'],
+  'Top Batsman': ['Player A', 'Player B', 'Player C'],
+  'Method of Next Dismissal': ['Caught', 'Bowled', 'LBW', 'Run Out'],
+  'First Innings Runs': ['Over 168.5', 'Under 168.5'],
+  'Race Winner': ['Driver A', 'Driver B', 'Driver C'],
+  'Podium Finish': ['Driver A', 'Driver B', 'Driver C'],
+  'Fastest Lap': ['Driver A', 'Driver B', 'Driver C'],
+  'Head-to-Head Matchup': ['Driver A', 'Driver B'],
+  'Points Finish (Top 10)': ['Driver A', 'Driver B', 'Driver C'],
+  'Handicap': ['Home -8.5', 'Away +8.5'],
+  'First to 20 Points': ['Home', 'Away'],
+  'Highest Scoring Half': ['1st Half', '2nd Half'],
+};
+
+// Small deterministic PRNG (mulberry32-ish) seeded from a string, so the same
+// event always generates the same markets/prices/gaps across reloads.
+function seededRandom(seed){
+  let h = 1779033703 ^ seed.length;
+  for (let i=0; i<seed.length; i++){
+    h = Math.imul(h ^ seed.charCodeAt(i), 3432918353);
+    h = (h << 13) | (h >>> 19);
+  }
+  return function(){
+    h = Math.imul(h ^ (h >>> 16), 2246822507);
+    h = Math.imul(h ^ (h >>> 13), 3266489909);
+    h ^= h >>> 16;
+    return (h >>> 0) / 4294967296;
+  };
+}
+
+// Each event gets one entry per its sport's 5 canonical market types. Some
+// market types end up with only a subset of providers "carrying" them
+// (offering live prices) — deliberately, so the effective/assigned provider
+// sometimes lacks a market and the system has to blend in another provider
+// (or, occasionally, no provider covers it at all). This is the same data
+// Coverage Gaps reads to be exhaustive. `override` = a manual per-event,
+// per-market provider pin (null until set in Event Overrides).
+function buildEventMarkets(){
+  const out = {};
+  EVENTS.forEach(evt=>{
+    const marketTypes = SPORT_MARKET_TYPES[evt.sport] || [];
+    const rand = seededRandom(evt.id);
+    out[evt.id] = marketTypes.map(mt=>{
+      const carrierIds = PROVIDERS.filter(()=> rand() > 0.35).map(p=>p.id);
+      const template = MARKET_SELECTIONS[mt] || ['Option A', 'Option B'];
+      const base = 1.6 + rand()*3.8;
+      const selections = template.map((name, i)=>{
+        const prices = {};
+        carrierIds.forEach(pid=>{
+          const variance = (rand()-0.5)*0.3;
+          prices[pid] = Math.max(1.01, +(base + i*0.55 + variance).toFixed(2));
+        });
+        return { name, prices };
+      });
+      return { marketType: mt, carrierIds, selections, override: null };
+    });
+  });
+  return out;
+}
+const EVENT_MARKETS = buildEventMarkets();
 
 // ---- GTH Provider Mappings — unified model -----------------------------
 // One record per (provider, sport/competition[, market type]) pairing.

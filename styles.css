@@ -431,21 +431,52 @@ textarea.input{height:auto;padding:var(--sp-2);resize:vertical;}
 .preset-row__date{font-size:11px;color:var(--fg-muted);}
 .preset-row .icon-btn{width:26px;height:26px;}
 
-/* Leaf card — market-type defaults under each competition */
+/* Leaf card — Market Type rows added under a Group or a Competition.
+   --leaf-depth sets indent to match whichever tree depth it sits inside. */
 .leaf-card{
   margin:var(--sp-1) var(--sp-3) var(--sp-2);
-  margin-inline-start:calc(3 * var(--tree-indent) + var(--sp-5));
+  margin-inline-start:calc((var(--leaf-depth, 3) - 1) * var(--tree-indent) + var(--sp-5));
   background:var(--bg-subtle);border:1px solid var(--border-subtle);
   border-radius:var(--radii-md);padding:var(--sp-2) var(--sp-3);
 }
 .leaf-card__title{font-size:10px;font-weight:var(--fw-bold);letter-spacing:.4px;text-transform:uppercase;color:var(--fg-muted);margin-bottom:var(--sp-1_5);}
-.leaf-row{display:grid;grid-template-columns:minmax(100px,1fr) 130px 130px 72px 1fr;column-gap:var(--sp-2);align-items:center;padding:var(--sp-1) 0;}
+.leaf-row{display:grid;grid-template-columns:minmax(120px,1fr) 116px 116px 116px 22px 22px;column-gap:var(--sp-2);align-items:center;padding:var(--sp-1_5) 0;}
 .leaf-row + .leaf-row{border-top:1px solid var(--border-subtle);}
+.leaf-row--pending{background:var(--bg-warning);box-shadow:inset 3px 0 0 var(--border-warning);}
 .leaf-row .badge{justify-self:start;}
-.leaf-row__label{font-size:11px;font-weight:var(--fw-medium);color:var(--fg-title);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.leaf-row__label{display:flex;align-items:center;gap:var(--sp-1_5);font-size:11px;font-weight:var(--fw-medium);color:var(--fg-title);overflow:hidden;}
+.leaf-row__label span.name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 .leaf-row__source{color:var(--fg-muted);font-size:11px;}
 .leaf-row__gth{display:flex;align-items:center;justify-content:center;}
 .leaf-row__state{text-align:right;}
+.leaf-row__remove{cursor:pointer;color:var(--fg-muted);display:flex;align-items:center;justify-content:center;}
+.leaf-row__remove:hover{color:var(--fg-error);}
+.leaf-card__empty{font-size:11px;color:var(--fg-muted);padding:var(--sp-1) 0;}
+
+/* Bulk-action toolbars — inline (not floating), shown only while rows are selected */
+.bulk-bar{display:none;align-items:center;gap:var(--sp-2);flex-wrap:wrap;
+  background:var(--bg-subtle);border:1px solid var(--border);border-radius:var(--radii-md);
+  padding:var(--sp-2) var(--sp-3);margin-bottom:var(--sp-2);font-size:var(--fs-xs);}
+.bulk-bar.open{display:flex;}
+.bulk-bar .sep{width:1px;height:18px;background:var(--border-muted);}
+
+/* Event Overrides — expandable market / selection drill-down rows */
+.eo-expand-btn{cursor:pointer;color:var(--fg-muted);display:inline-flex;transition:transform .12s;}
+.eo-expand-btn.open{transform:rotate(90deg);}
+.market-detail-row td{padding:0 !important;border-bottom:1px solid var(--border-muted);background:var(--bg-subtle);}
+.market-table{width:100%;font-size:11px;}
+.market-table td,.market-table th{padding:var(--sp-1_5) var(--sp-2);}
+.market-table thead th{text-align:left;color:var(--fg-muted);font-weight:var(--fw-semibold);text-transform:uppercase;font-size:10px;letter-spacing:.3px;border-bottom:1px solid var(--border);}
+.market-row{border-bottom:1px solid var(--border-subtle);}
+.market-row:last-child{border-bottom:0;}
+.market-row--gap{box-shadow:inset 3px 0 0 var(--border-warning);}
+.selection-detail-row td{background:var(--bg-panel);padding:var(--sp-2) var(--sp-3) var(--sp-2) var(--sp-8) !important;}
+.selection-table{width:100%;font-size:11px;border:1px solid var(--border-subtle);border-radius:var(--radii-sm);overflow:hidden;}
+.selection-table th,.selection-table td{padding:var(--sp-1) var(--sp-2);text-align:right;}
+.selection-table th:first-child,.selection-table td:first-child{text-align:left;}
+.selection-table thead th{background:var(--bg-muted);color:var(--fg-muted);font-weight:var(--fw-semibold);}
+.selection-table td.price-current{font-weight:var(--fw-bold);color:var(--fg-title);background:var(--blue-subtle);}
+.selection-table td.price-none{color:var(--fg-subtle);}
 
 /* Blending tree — 8-column CSS grid, sticky header, depth-indented rows */
 #view-blending-config.active{display:flex;flex-direction:column;height:100%;overflow:hidden;}
@@ -472,6 +503,12 @@ textarea.input{height:auto;padding:var(--sp-2);resize:vertical;}
 /* Group rows — subtle visual distinction from sport/competition */
 .tree-row--group .name{font-weight:var(--fw-medium);font-style:normal;}
 .tree-row--group .tree-row__lead .ic{color:var(--fg-muted);}
+/* Market Type rows — added ad hoc under a Group/Competition; same grid as
+   everything else, just a lighter tint + tag icon so they read as "extra". */
+.tree-row--markettype{background:var(--bg-subtle);}
+.tree-row--markettype .name{font-weight:var(--fw-normal);color:var(--fg);}
+.tree-row--markettype.tree-row--add select{color:var(--fg-muted);}
+.tree-row--markettype.tree-row--add:hover{background:var(--bg-muted);}
 
 /* Rich hover tooltip for "not mapped to GTH" warnings, with a fix-it link */
 .map-warning{position:relative;display:inline-flex;align-items:center;cursor:help;flex:none;}
