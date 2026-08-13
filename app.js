@@ -281,8 +281,6 @@ const pendingHierarchy = {};
 const openTreeNodes = new Set();
 let bcProviderFilter = '';
 let bcSuppressAutoExpand = false;
-// Bulk-select for Market Type rows — composite keys `${level}:${nodeId}:${marketType}`
-const bcMtSelected = new Set();
 
 function sourceLabel(src){
   if (src==='own') return 'Explicit';
@@ -492,14 +490,12 @@ function renderMarketTypeRows(level, nodeId, sportId, compId, depth){
     const effPre = ownPre || parentPre;
     const effInp = ownInp || parentInp;
     const isPending = [`mtval:${key}:prematch`,`mtval:${key}:inplay`,`mtsec:${key}`].some(k=>k in pendingHierarchy);
-    const checked = bcMtSelected.has(key);
     const preMapped = isMarketTypeMapped(effPre, sportId, mt);
     const inpMapped = isMarketTypeMapped(effInp, sportId, mt);
     const warn = !preMapped ? mtWarningHtml(effPre, sportId, mt) : (!inpMapped ? mtWarningHtml(effInp, sportId, mt) : '');
     return `
     <div class="tree-row tree-row--markettype ${isPending?'tree-row--pending':''}" style="--depth:${depth}" role="row" aria-level="${depth}">
       <div class="tree-row__lead">
-        <span class="checkbox ${checked?'checked':''}" data-mt-check="${key}">${checked?ICONS.check():''}</span>
         ${ic('tag', 16, 'style="color:var(--fg-muted)"')}
         <span class="name" title="${mt}">${mt}</span>
       </div>
@@ -704,18 +700,10 @@ function renderHierarchyTree(){
 (function(){
   const root = document.getElementById('hierarchy-tree');
   root.addEventListener('click', e=>{
-    const check = e.target.closest('[data-mt-check]');
-    if (check){
-      const key = check.dataset.mtCheck;
-      if (bcMtSelected.has(key)) bcMtSelected.delete(key); else bcMtSelected.add(key);
-      renderHierarchyTree();
-      return;
-    }
     const remove = e.target.closest('[data-mt-remove]');
     if (remove){
       const key = remove.dataset.mtRemove;
       delete MARKET_TYPE_DEFAULTS[key];
-      bcMtSelected.delete(key);
       logAudit('Level 1 — Blending Config', 'Market type row removed', key);
       renderHierarchyTree();
       return;
@@ -756,48 +744,7 @@ function updatePendingBar(){
   document.getElementById('bc-save').disabled = n===0;
   document.getElementById('bc-action-bar').classList.toggle('open', n>0);
   document.getElementById('bc-pending-count').textContent = n;
-  updateMtBulkBar();
 }
-
-/* ---- Market Type row bulk actions (select rows across the tree) -------- */
-function populateMtBulkSelects(){
-  const opts = `<option value="">Clear (inherit)</option>` + PROVIDERS.map(p=>`<option value="${p.id}">${p.name}</option>`).join('');
-  document.getElementById('mt-bulk-prematch').innerHTML = `<option value="__nochange">Pre-Match: no change</option>${opts}`;
-  document.getElementById('mt-bulk-inplay').innerHTML = `<option value="__nochange">In-Play: no change</option>${opts}`;
-  document.getElementById('mt-bulk-secondary').innerHTML = `<option value="__nochange">Secondary: no change</option>${opts}`;
-}
-function updateMtBulkBar(){
-  const bar = document.getElementById('mt-bulk-bar');
-  const n = bcMtSelected.size;
-  bar.classList.toggle('open', n>0);
-  document.getElementById('mt-bulk-label').textContent = n>0 ? `${n} market type row(s) selected` : 'Check market type rows below (✓) to enable bulk actions';
-  document.getElementById('mt-bulk-label').classList.toggle('bulk-bar__hint', n===0);
-  ['mt-bulk-prematch','mt-bulk-inplay','mt-bulk-secondary','mt-bulk-apply','mt-bulk-remove'].forEach(id=>{
-    document.getElementById(id).disabled = n===0;
-  });
-}
-document.getElementById('mt-bulk-apply').addEventListener('click', ()=>{
-  const preV = document.getElementById('mt-bulk-prematch').value;
-  const inpV = document.getElementById('mt-bulk-inplay').value;
-  const secV = document.getElementById('mt-bulk-secondary').value;
-  if (preV==='__nochange' && inpV==='__nochange' && secV==='__nochange'){ toast('warning','Nothing to apply','Pick at least one field to change.'); return; }
-  bcMtSelected.forEach(key=>{
-    if (preV !== '__nochange') pendingHierarchy[`mtval:${key}:prematch`] = preV || null;
-    if (inpV !== '__nochange') pendingHierarchy[`mtval:${key}:inplay`] = inpV || null;
-    if (secV !== '__nochange') pendingHierarchy[`mtsec:${key}`] = secV || null;
-  });
-  toast('success', 'Staged', `${bcMtSelected.size} market type row(s) updated — review and Save changes.`);
-  renderHierarchyTree();
-});
-document.getElementById('mt-bulk-remove').addEventListener('click', ()=>{
-  const n = bcMtSelected.size;
-  bcMtSelected.forEach(key=>{ delete MARKET_TYPE_DEFAULTS[key]; logAudit('Level 1 — Blending Config','Market type row removed', key); });
-  bcMtSelected.clear();
-  toast('default', 'Removed', `${n} market type row(s) removed.`);
-  renderHierarchyTree();
-});
-document.getElementById('mt-bulk-clear').addEventListener('click', ()=>{ bcMtSelected.clear(); renderHierarchyTree(); });
-populateMtBulkSelects();
 document.getElementById('bc-discard').addEventListener('click', ()=>{
   for (const k in pendingHierarchy) delete pendingHierarchy[k];
   renderHierarchyTree();
