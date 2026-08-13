@@ -1,73 +1,122 @@
 /* ============================================================
-   MOCK DATA — Feed Provider Blending & Integration Platform
+   MOCK DATA — Fit Provider Platform
    All data is fabricated for prototype/demo purposes only.
    ============================================================ */
 
 const PROVIDERS = [
-  { id:'betradar',  name:'BetRadar',   color:'#007AFF', short:'BR' },
-  { id:'betgenious',name:'BetGenious', color:'#149900', short:'BG' },
-  { id:'inspired',  name:'Inspired',   color:'#CCAA00', short:'IN' },
-  { id:'highlight', name:'Highlight',  color:'#CC0E00', short:'HL' },
+  { id:'betradar',  name:'BetRadar',   color:'#007AFF', short:'BR', exclusive:['eb-euroleague'], official:['cr-ipl','cr-bbl'] },
+  { id:'betgenious',name:'BetGenious', color:'#149900', short:'BG', exclusive:[], official:['eb-liga-acb'] },
+  { id:'inspired',  name:'Inspired',   color:'#CCAA00', short:'IN', exclusive:[], official:['sv-premier','eba-h2h'] },
+  { id:'highlight', name:'Highlight',  color:'#CC0E00', short:'HL', exclusive:[], official:['sv-euro','f1-f2'] },
 ];
 
 const providerById = id => PROVIDERS.find(p=>p.id===id);
 
+// ---- Global default (top of the cascade) --------------------------------
+const GLOBAL_DEFAULT = { prematch:'betradar', inplay:'betradar', secondary:null };
+
 // ---- Sport / Competition hierarchy -----------------------------------
+// Phase-split: prematch/inplay/secondary at every level. null = inherit.
 const SPORTS = [
   {
     id:'soccer', name:'Soccer Virtuals', icon:'ball',
-    defaultProvider:'inspired',
+    prematch:'inspired', inplay:'inspired', secondary:null,
     competitions:[
-      { id:'sv-premier', name:'Virtual Premier League', defaultProvider:null, events:9 },
-      { id:'sv-euro',     name:'Virtual Euro Cup',        defaultProvider:'highlight', events:6 },
-      { id:'sv-world',    name:'Virtual World Series',    defaultProvider:null, events:4 },
+      { id:'sv-premier', name:'Virtual Premier League', prematch:'betradar', inplay:null, secondary:null, events:9 },
+      { id:'sv-euro',     name:'Virtual Euro Cup',        prematch:'highlight', inplay:'highlight', secondary:null, events:6 },
+      { id:'sv-world',    name:'Virtual World Series',    prematch:null, inplay:null, secondary:null, events:4 },
     ]
   },
   {
     id:'basketball', name:'European Basketball', icon:'ball',
-    defaultProvider:'betradar',
+    prematch:'betradar', inplay:'betradar', secondary:'betgenious',
     competitions:[
-      { id:'eb-euroleague', name:'EuroLeague',       defaultProvider:null, events:5 },
-      { id:'eb-eurocup',    name:'EuroCup',           defaultProvider:null, events:4 },
-      { id:'eb-liga-acb',   name:'Liga ACB (Spain)',  defaultProvider:'betgenious', events:6 },
-      { id:'eb-lnb',        name:'LNB Pro A (France)',defaultProvider:null, events:3 },
+      { id:'eb-euroleague', name:'EuroLeague',       prematch:null, inplay:'betgenious', secondary:null, events:5 },
+      { id:'eb-eurocup',    name:'EuroCup',           prematch:null, inplay:null, secondary:null, events:4 },
+      { id:'eb-liga-acb',   name:'Liga ACB (Spain)',  prematch:'betgenious', inplay:'betgenious', secondary:null, events:6 },
+      { id:'eb-lnb',        name:'LNB Pro A (France)',prematch:null, inplay:null, secondary:null, events:3 },
     ]
   },
   {
     id:'cricket', name:'Cricket', icon:'bat',
-    defaultProvider:'betgenious',
+    prematch:'betgenious', inplay:'betgenious', secondary:'betradar',
     competitions:[
-      { id:'cr-ipl',   name:'Indian Premier League', defaultProvider:null, events:8 },
-      { id:'cr-bbl',   name:'Big Bash League',        defaultProvider:'betradar', events:5 },
-      { id:'cr-cpl',   name:'Caribbean Premier League', defaultProvider:null, events:4 },
-      { id:'cr-t20i',  name:'T20 Internationals',     defaultProvider:null, events:7 },
+      { id:'cr-ipl',   name:'Indian Premier League', prematch:null, inplay:null, secondary:null, events:8 },
+      { id:'cr-bbl',   name:'Big Bash League',        prematch:'betradar', inplay:'betradar', secondary:null, events:5 },
+      { id:'cr-cpl',   name:'Caribbean Premier League', prematch:null, inplay:null, secondary:null, events:4 },
+      { id:'cr-t20i',  name:'T20 Internationals',     prematch:null, inplay:null, secondary:null, events:7 },
     ]
   },
   {
     id:'f1', name:'F1', icon:'flag',
-    defaultProvider:'betradar',
+    prematch:'betradar', inplay:'betradar', secondary:null,
     competitions:[
-      { id:'f1-gp',     name:'Grand Prix Season',    defaultProvider:null, events:3 },
-      { id:'f1-sprint', name:'Sprint Series',         defaultProvider:null, events:2 },
-      { id:'f1-f2',     name:'Formula 2',             defaultProvider:'highlight', events:2 },
+      { id:'f1-gp',     name:'Grand Prix Season',    prematch:null, inplay:null, secondary:null, events:3 },
+      { id:'f1-sprint', name:'Sprint Series',         prematch:null, inplay:null, secondary:null, events:2 },
+      { id:'f1-f2',     name:'Formula 2',             prematch:'highlight', inplay:'highlight', secondary:null, events:2 },
     ]
   },
   {
     id:'ebasketball', name:'eBasketball', icon:'controller',
-    defaultProvider:'highlight',
+    prematch:'highlight', inplay:'highlight', secondary:'inspired',
     competitions:[
-      { id:'eba-nba2k',  name:'NBA 2K League',        defaultProvider:null, events:6 },
-      { id:'eba-esbl',   name:'eBasketball Battle',   defaultProvider:null, events:9 },
-      { id:'eba-h2h',    name:'H2H GG League',        defaultProvider:'inspired', events:5 },
+      { id:'eba-nba2k',  name:'NBA 2K League',        prematch:null, inplay:null, secondary:null, events:6 },
+      { id:'eba-esbl',   name:'eBasketball Battle',   prematch:null, inplay:null, secondary:null, events:9 },
+      { id:'eba-h2h',    name:'H2H GG League',        prematch:'inspired', inplay:'inspired', secondary:null, events:5 },
     ]
   },
 ];
 
-// Per-competition, per-matchtype override state (Level 1, lowest tier)
-// key: `${competitionId}:${matchType}` -> providerId | null(inherit)
-const MATCHTYPE_DEFAULTS = {
-  'sv-premier:prematch':'betradar',   // intentionally unmapped provider to trigger validation demo
-  'eb-euroleague:inplay':'betgenious',
+// ---- Per-sport Groups / Tier templates ----------------------------------
+// Groups cascade defaults to their competitions. Competitions can override.
+// Q1 decided: per-sport. Q2 open: build as new+seedable, not DA-reuse.
+const GROUPS = [
+  { id:'grp-soccer-a', sportId:'soccer', name:'Group A — Premium Virtuals',
+    prematch:null, inplay:null, secondary:null,
+    competitions:['sv-premier','sv-euro'] },
+  { id:'grp-soccer-b', sportId:'soccer', name:'Group B — Standard',
+    prematch:null, inplay:null, secondary:null,
+    competitions:['sv-world'] },
+
+  { id:'grp-bball-a', sportId:'basketball', name:'Group A — Top Tier',
+    prematch:null, inplay:null, secondary:null,
+    competitions:['eb-euroleague','eb-eurocup'] },
+  { id:'grp-bball-b', sportId:'basketball', name:'Group B — National Leagues',
+    prematch:null, inplay:null, secondary:null,
+    competitions:['eb-liga-acb','eb-lnb'] },
+
+  { id:'grp-cricket-a', sportId:'cricket', name:'Group A — Franchise T20',
+    prematch:null, inplay:null, secondary:null,
+    competitions:['cr-ipl','cr-bbl','cr-cpl'] },
+  { id:'grp-cricket-b', sportId:'cricket', name:'Group B — International',
+    prematch:null, inplay:null, secondary:null,
+    competitions:['cr-t20i'] },
+
+  { id:'grp-f1-a', sportId:'f1', name:'Group A — Formula 1',
+    prematch:null, inplay:null, secondary:null,
+    competitions:['f1-gp','f1-sprint'] },
+  { id:'grp-f1-b', sportId:'f1', name:'Group B — Junior Series',
+    prematch:null, inplay:null, secondary:null,
+    competitions:['f1-f2'] },
+
+  { id:'grp-ebasket-a', sportId:'ebasketball', name:'Group A — Pro Leagues',
+    prematch:null, inplay:null, secondary:null,
+    competitions:['eba-nba2k','eba-esbl'] },
+  { id:'grp-ebasket-b', sportId:'ebasketball', name:'Group B — H2H',
+    prematch:null, inplay:null, secondary:null,
+    competitions:['eba-h2h'] },
+];
+
+function groupForCompetition(compId){ return GROUPS.find(g=>g.competitions.includes(compId))||null; }
+function groupsForSport(sportId){ return GROUPS.filter(g=>g.sportId===sportId); }
+
+// ---- Market-type defaults (per competition, per market type) ------------
+// key: `${competitionId}:${marketTypeName}` → { prematch, inplay }
+// null = inherit from competition level
+const MARKET_TYPE_DEFAULTS = {
+  'eb-euroleague:Match Winner':  { prematch:'betradar', inplay:'betgenious' },
+  'eb-euroleague:Total Points Over/Under': { prematch:null, inplay:'betgenious' },
+  'cr-ipl:Match Winner':         { prematch:null, inplay:'betradar' },
 };
 
 // ---- GTH mapping status per (provider, sport/competition) ------------
@@ -113,9 +162,9 @@ const EVENTS = [
 
 // ---- Saved filter presets (Event Overrides) --------------------------
 const SAVED_PRESETS = [
-  { id:'p1', name:'Live events only', filters:{ sport:'', competition:'', status:'in-play', range:'7', override:'' } },
-  { id:'p2', name:'Cricket — next 7d', filters:{ sport:'cricket', competition:'', status:'', range:'7', override:'' } },
-  { id:'p3', name:'Overridden events', filters:{ sport:'', competition:'', status:'', range:'30', override:'yes' } },
+  { id:'p1', name:'Live events only', createdAt:'2026-07-28T09:12:00Z', filters:{ sport:'', competition:'', status:'in-play', range:'7', override:'' } },
+  { id:'p2', name:'Cricket — next 7d', createdAt:'2026-08-03T14:40:00Z', filters:{ sport:'cricket', competition:'', status:'', range:'7', override:'' } },
+  { id:'p3', name:'Overridden events', createdAt:'2026-08-10T11:05:00Z', filters:{ sport:'', competition:'', status:'', range:'30', override:'yes' } },
 ];
 
 // ---- Provider health / outages (Level 3) --------------------------------

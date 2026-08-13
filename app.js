@@ -3,21 +3,25 @@
    Vanilla JS, no build step. All writes are in-memory only.
    ============================================================ */
 
+// ic(name, size) — renders a sprite symbol with Ivory stroke scale.
+// size must be 12|16|20|24 (maps to .ic-N class with correct stroke-width).
+function ic(name, size, extra=''){
+  return `<svg class="ic ic-${size}${extra?' '+extra:''}" aria-hidden="true"><use href="#ic-${name}"/></svg>`;
+}
+
+// Shorthand aliases kept for readability at call sites
 const ICONS = {
-  chevron:  `<svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M9 18l6-6-6-6"/></svg>`,
-  check:    `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 13l4 4L19 7"/></svg>`,
-  x:        `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>`,
-  edit:     `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>`,
-  trash:    `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2m2 0v14a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V6h12z"/></svg>`,
-  history:  `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>`,
-  external: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 4h6v6M20 4L10 14M9 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/></svg>`,
-  alert:    `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><path d="M12 9v4M12 17h.01"/></svg>`,
-  info:     `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg>`,
-  more:     `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="5" r="1.2"/><circle cx="12" cy="12" r="1.2"/><circle cx="12" cy="19" r="1.2"/></svg>`,
-  search:   `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>`,
-  arrowRight: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M13 5l7 7-7 7"/></svg>`,
-  sportIcon: `<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color:var(--fg-muted);flex:none;"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>`,
-  competitionIcon: `<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color:var(--fg-muted);flex:none;"><circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/></svg>`,
+  chevron:        ()=> ic('chevron-right', 12, 'chev'),
+  check:          ()=> ic('check', 16),
+  x:              ()=> ic('x', 16),
+  edit:           ()=> ic('square-pen', 16),
+  trash:          ()=> ic('trash-2', 16),
+  history:        ()=> ic('history', 16),
+  alert:          ()=> ic('triangle-alert', 16),
+  search:         ()=> ic('search', 16),
+  arrowRight:     ()=> ic('arrow-right', 16),
+  sportIcon:      ()=> ic('layout-grid', 16, 'style="color:var(--fg-muted)"'),
+  competitionIcon:()=> ic('history', 16, 'style="color:var(--fg-muted)"'),
 };
 
 function relTime(iso){
@@ -39,10 +43,15 @@ function providerChip(id, opts={}){
   const cls = opts.override ? 'provider-chip override' : (opts.inherited ? 'provider-chip inherited' : 'provider-chip');
   return `<span class="${cls}"><span class="swatch" style="background:${p.color}"></span>${p.name}${opts.suffix?` · ${opts.suffix}`:''}</span>`;
 }
+// Ivory badge for a provider's identity — colour swatch + name.
+function providerBadge(id){
+  const p = providerById(id); if(!p) return '';
+  return `<span class="badge badge-provider"><span class="swatch" style="background:${p.color}"></span>${p.name}</span>`;
+}
 function statusBadge(status){
   return status === 'in-play'
-    ? `<span class="badge badge-red"><span class="dot"></span>In-Play</span>`
-    : `<span class="badge badge-blue"><span class="dot"></span>Pre-Match</span>`;
+    ? `<span class="badge badge-inplay">In-Play</span>`
+    : `<span class="badge badge-preplay">Pre-Match</span>`;
 }
 function healthBadge(status){
   const map = { operational:['badge-green','Operational'], degraded:['badge-yellow','Degraded'], down:['badge-red','Down'] };
@@ -53,7 +62,7 @@ function toast(kind, title, body, ms=4200){
   const stack = document.getElementById('toast-stack');
   const el = document.createElement('div');
   el.className = `toast toast-${kind}`;
-  el.innerHTML = `<div style="flex:1;"><strong>${title}</strong><p>${body||''}</p></div><span class="toast-close">${ICONS.x}</span>`;
+  el.innerHTML = `<div style="flex:1;"><strong>${title}</strong><p>${body||''}</p></div><span class="toast-close">${ICONS.x()}</span>`;
   el.querySelector('.toast-close').onclick = () => el.remove();
   stack.appendChild(el);
   setTimeout(()=>el.remove(), ms);
@@ -104,7 +113,7 @@ function mapWarningHtml(providerId, sportId, competitionId, matchType){
   const mtArg = matchType ? `'${matchType}'` : 'null';
   const compArg = competitionId ? `'${competitionId}'` : 'null';
   return `<span class="map-warning">
-    ${ICONS.alert.replace('<svg ', '<svg class="map-warning__icon" ')}
+    ${ic('triangle-alert', 16, 'map-warning__icon')}
     <div class="map-tooltip">
       <strong>Not mapped to GTH</strong>
       <p>${providerLabel} isn't mapped to <b>${scopeLabel}</b> in the internal hierarchy — it can't be used here until that's resolved.</p>
@@ -120,16 +129,18 @@ function mapWarningHtml(providerId, sportId, competitionId, matchType){
 // competition record regardless of which match type triggered the warning.
 function goToMappingFor(providerId, sportId, competitionId, matchType){
   const rec = GTH_MAPPINGS.find(m=> m.provider === providerId && m.status === 'suggested' && m.level === 'competition' && m.suggestion.competitionId === competitionId);
-  document.querySelector('.nav-item[data-view="mappings"]').click();
+  goToView('mappings');
   if (rec){
-    document.querySelector('.tab[data-tab="suggested"]').click();
     const state = getTableState('suggested');
     state.text = competitionId ? competitionName(competitionId) : sportName(sportId);
     state.provider = providerId;
+    document.getElementById('sugg-search').value = state.text;
+    document.getElementById('sugg-provider').value = providerId;
     renderSuggestedTab();
+    document.getElementById('mappings-suggestions').scrollIntoView({behavior:'smooth', block:'nearest'});
   } else {
-    document.querySelector('.tab[data-tab="unmapped"]').click();
-    document.querySelector('.tab[data-tab="unmapped-competitions"]').click();
+    document.querySelector('#view-mappings .tab[data-tab="unmapped"]').click();
+    setMappingLevel('unmapped','competition');
     const state = getTableState('unmapped-competitions');
     state.colFilters = state.colFilters || {};
     state.colFilters.providerSport = sportName(sportId);
@@ -143,49 +154,67 @@ function goToMappingFor(providerId, sportId, competitionId, matchType){
    ============================================================ */
 const VIEW_LABELS = {
   'blending-config':'Blending Configuration', 'event-overrides':'Event Overrides',
-  'automation':'Automated Actions', 'analytics':'Provider Analytics',
-  'mappings':'Provider Mappings', 'audit-log':'Audit Log'
+  'mappings':'Provider Mappings', 'monitoring':'Monitoring', 'audit-log':'Audit Log'
 };
+let currentView = 'blending-config';
 let bcSearchQuery = '';
 let eoSearchQuery = '';
-function updateHeaderSearchForView(view){
-  const wrap = document.getElementById('search-wrap');
-  const input = document.getElementById('global-search');
-  if (view === 'blending-config'){ wrap.style.display='flex'; input.placeholder='Search sports or competitions…'; input.value=bcSearchQuery; }
-  else if (view === 'event-overrides'){ wrap.style.display='flex'; input.placeholder='Search by event ID or name…'; input.value=eoSearchQuery; }
-  else { wrap.style.display='none'; }
+function goToView(view){
+  if (!VIEW_LABELS[view]) return;
+  currentView = view;
+  document.querySelectorAll('.ivory-tab[data-view]').forEach(t=>{
+    const on = t.dataset.view === view;
+    t.setAttribute('aria-selected', on); t.tabIndex = on ? 0 : -1;
+  });
+  document.querySelectorAll('.main > .view').forEach(v=>{
+    v.classList.remove('active'); v.setAttribute('aria-hidden', 'true');
+  });
+  const panel = document.getElementById('view-'+view);
+  panel.classList.add('active'); panel.removeAttribute('aria-hidden');
+  document.getElementById('ai-context').textContent = 'Context: ' + VIEW_LABELS[view];
+  if (view === 'audit-log') renderAuditLog();
+  document.querySelector('.main').scrollTop = 0;
 }
-document.getElementById('global-search').addEventListener('input', function(){
-  const view = document.querySelector('.nav-item.active')?.dataset.view;
-  if (view === 'blending-config'){ bcSearchQuery = this.value; renderHierarchyTree(); }
-  else if (view === 'event-overrides'){ eoSearchQuery = this.value; renderEventsTable(); }
+// In-content search — each view owns a [data-search] input in its toolbar.
+// Delegated from .main so it survives every re-render and needs no per-view wiring.
+document.querySelector('.main').addEventListener('input', e=>{
+  const box = e.target.closest('[data-search]');
+  if (!box) return;
+  if (box.dataset.search === 'blending'){ bcSearchQuery = box.value; bcSuppressAutoExpand = false; renderHierarchyTree(); }
+  else if (box.dataset.search === 'overrides'){ eoSearchQuery = box.value; renderEventsTable(); }
 });
-
-document.querySelectorAll('.nav-item[data-view]').forEach(item=>{
-  item.addEventListener('click', ()=>{
-    document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
-    item.classList.add('active');
-    const view = item.dataset.view;
-    document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
-    document.getElementById('view-'+view).classList.add('active');
-    document.getElementById('ai-context').textContent = 'Context: ' + VIEW_LABELS[view];
-    updateHeaderSearchForView(view);
-    if (view === 'audit-log') renderAuditLog();
+// WAI-ARIA tablist: click + roving Arrow/Home/End keyboard (auto-activating pattern)
+(function(){
+  const tablist = document.querySelector('[role="tablist"].ivory-tabs');
+  if (!tablist) return;
+  tablist.addEventListener('click', e=>{
+    const tab = e.target.closest('.ivory-tab[data-view]');
+    if (tab) goToView(tab.dataset.view);
   });
-});
-// Tabs (also handles nested sub-tabs, e.g. Active Mappings > Competitions/Market Types) —
-// scoped to direct-child tab-panels so an outer tab switch never disturbs a nested one.
-document.querySelectorAll('.tabs').forEach(tabbar=>{
-  tabbar.querySelectorAll('.tab').forEach(tab=>{
-    tab.addEventListener('click', (e)=>{
-      e.stopPropagation();
-      tabbar.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
-      tab.classList.add('active');
-      const panelWrap = tabbar.parentElement;
-      panelWrap.querySelectorAll(':scope > .tab-panel').forEach(p=>p.classList.remove('active'));
-      panelWrap.querySelector('#tab-'+tab.dataset.tab).classList.add('active');
-    });
+  tablist.addEventListener('keydown', e=>{
+    const tabs = [...tablist.querySelectorAll('.ivory-tab[data-view]')];
+    const idx = tabs.findIndex(t=>t===document.activeElement);
+    if (idx < 0) return;
+    let next = idx;
+    if      (e.key==='ArrowRight') next = (idx+1) % tabs.length;
+    else if (e.key==='ArrowLeft')  next = (idx-1+tabs.length) % tabs.length;
+    else if (e.key==='Home')       next = 0;
+    else if (e.key==='End')        next = tabs.length-1;
+    else return;
+    e.preventDefault(); tabs[next].focus(); goToView(tabs[next].dataset.view);
   });
+})();
+// Sub-tabs inside content panels — delegated from .main so they never interfere with the nav tablist
+document.querySelector('.main').addEventListener('click', e=>{
+  const tab = e.target.closest('.tabs .tab');
+  if (!tab) return;
+  e.stopPropagation();
+  const tabbar = tab.closest('.tabs');
+  tabbar.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+  tab.classList.add('active');
+  const panelWrap = tabbar.parentElement;
+  panelWrap.querySelectorAll(':scope > .tab-panel').forEach(p=>p.classList.remove('active'));
+  panelWrap.querySelector('#tab-'+tab.dataset.tab).classList.add('active');
 });
 
 /* Theme toggle */
@@ -196,7 +225,7 @@ document.getElementById('theme-toggle').addEventListener('click', ()=>{
   renderRevenueChart(); renderBetsChart(); // re-render svg charts w/ theme-aware colors
 });
 
-document.getElementById('notif-btn').addEventListener('click', ()=> document.querySelector('.nav-item[data-view="mappings"]').click());
+document.getElementById('notif-btn').addEventListener('click', ()=> goToView('mappings'));
 
 /* Documentation panel */
 document.getElementById('docs-btn').addEventListener('click', ()=>{ renderDocsPanel(); document.getElementById('docs-panel').classList.add('open'); });
@@ -204,37 +233,94 @@ document.getElementById('docs-close').addEventListener('click', ()=> document.ge
 
 /* ============================================================
    LEVEL 1 — BLENDING CONFIGURATION (hierarchy tree)
+   Full cascade: Global → Sport → Group → Competition → Market Type
+   Phase (prematch/inplay) resolved independently at every level.
+   Secondary (gap-fill) provider at every level.
    ============================================================ */
-const pendingHierarchy = {}; // key -> providerId|null
-const openTreeNodes = new Set(); // persists expand/collapse state across re-renders
+const pendingHierarchy = {};
+const openTreeNodes = new Set();
 let bcProviderFilter = '';
-const TREE_NAME_BASE = 290; // px — see renderHierarchyTree comment on column alignment
+let bcSuppressAutoExpand = false;
 
+function sourceLabel(src){
+  if (src==='own') return 'Explicit';
+  if (src==='global') return '↑ Global';
+  if (src==='sport') return '↑ Sport';
+  if (src==='group') return '↑ Group';
+  if (src==='competition') return '↑ Comp';
+  return '';
+}
+
+// --- Cascade resolver ---------------------------------------------------
+// Walks: Competition → Group → Sport → Global for a given phase.
+// pendingHierarchy keys: `global:${phase}`, `sport:${sportId}:${phase}`,
+//   `group:${groupId}:${phase}`, `comp:${compId}:${phase}`, `secondary:${level}:${id}`
+// Returns { value, source }
+
+function pendingOr(key, committed){ return (key in pendingHierarchy) ? pendingHierarchy[key] : committed; }
+
+function resolveProvider(sportId, compId, phase){
+  const comp = SPORTS.flatMap(s=>s.competitions).find(c=>c.id===compId);
+  const sport = SPORTS.find(s=>s.id===sportId);
+  const group = groupForCompetition(compId);
+  const compVal = pendingOr(`comp:${compId}:${phase}`, comp[phase]);
+  if (compVal) return { value:compVal, source:'own' };
+  if (group){
+    const grpVal = pendingOr(`group:${group.id}:${phase}`, group[phase]);
+    if (grpVal) return { value:grpVal, source:'group' };
+  }
+  const sportVal = pendingOr(`sport:${sportId}:${phase}`, sport[phase]);
+  if (sportVal) return { value:sportVal, source:'sport' };
+  const globalVal = pendingOr(`global:${phase}`, GLOBAL_DEFAULT[phase]);
+  return { value:globalVal, source:'global' };
+}
+
+function resolveSecondary(sportId, compId){
+  const comp = SPORTS.flatMap(s=>s.competitions).find(c=>c.id===compId);
+  const sport = SPORTS.find(s=>s.id===sportId);
+  const group = groupForCompetition(compId);
+  const compVal = pendingOr(`secondary:comp:${compId}`, comp.secondary);
+  if (compVal) return { value:compVal, source:'own' };
+  if (group){
+    const grpVal = pendingOr(`secondary:group:${group.id}`, group.secondary);
+    if (grpVal) return { value:grpVal, source:'group' };
+  }
+  const sportVal = pendingOr(`secondary:sport:${sportId}`, sport.secondary);
+  if (sportVal) return { value:sportVal, source:'sport' };
+  const globalVal = pendingOr(`secondary:global`, GLOBAL_DEFAULT.secondary);
+  return { value:globalVal, source:'global' };
+}
+
+function resolveMarketType(sportId, compId, marketType, phase){
+  const key = `${compId}:${marketType}`;
+  const mtKey = `mt:${key}:${phase}`;
+  const mtVal = pendingOr(mtKey, MARKET_TYPE_DEFAULTS[key]?.[phase] ?? null);
+  if (mtVal) return { value:mtVal, source:'own' };
+  return resolveProvider(sportId, compId, phase);
+}
+
+// Backward-compat wrappers used by effectiveEventProvider and other tabs
 function effectiveMatchTypeProvider(sport, comp, matchType){
-  const key = `${comp.id}:${matchType}`;
-  if (key in pendingHierarchy) return { value:pendingHierarchy[key], source:'pending' };
-  if (MATCHTYPE_DEFAULTS[key]) return { value:MATCHTYPE_DEFAULTS[key], source:'own' };
-  const compKey = `comp:${comp.id}`;
-  const compProvider = (compKey in pendingHierarchy) ? pendingHierarchy[compKey] : comp.defaultProvider;
-  if (compProvider) return { value:compProvider, source:'competition' };
-  const sportKey = `sport:${sport.id}`;
-  const sportProvider = (sportKey in pendingHierarchy) ? pendingHierarchy[sportKey] : sport.defaultProvider;
-  return { value:sportProvider, source:'sport' };
+  return resolveProvider(sport.id, comp.id, matchType);
 }
 function effectiveCompProvider(sport, comp){
-  const compKey = `comp:${comp.id}`;
-  if (compKey in pendingHierarchy) return { value:pendingHierarchy[compKey], source:'pending' };
-  if (comp.defaultProvider) return { value:comp.defaultProvider, source:'own' };
-  const sportKey = `sport:${sport.id}`;
-  const sportProvider = (sportKey in pendingHierarchy) ? pendingHierarchy[sportKey] : sport.defaultProvider;
-  return { value:sportProvider, source:'sport' };
+  return resolveProvider(sport.id, comp.id, 'prematch');
 }
 function compEffectiveProviders(sport, comp){
-  return [ effectiveCompProvider(sport, comp).value, effectiveMatchTypeProvider(sport, comp, 'prematch').value, effectiveMatchTypeProvider(sport, comp, 'inplay').value ];
+  return [
+    resolveProvider(sport.id, comp.id, 'prematch').value,
+    resolveProvider(sport.id, comp.id, 'inplay').value,
+    resolveSecondary(sport.id, comp.id).value
+  ].filter(Boolean);
 }
 
 function providerOptions(selectedId, includeInherit, inheritLabel){
-  let html = includeInherit ? `<option value="">${inheritLabel}</option>` : '';
+  let html = includeInherit ? `<option value="">${inheritLabel||'Inherit'}</option>` : '';
+  PROVIDERS.forEach(p=>{ html += `<option value="${p.id}" ${p.id===selectedId?'selected':''}>${p.name}</option>`; });
+  return html;
+}
+function providerOptionsNullable(selectedId, inheritLabel){
+  let html = `<option value="">${inheritLabel||'None (inherit)'}</option>`;
   PROVIDERS.forEach(p=>{ html += `<option value="${p.id}" ${p.id===selectedId?'selected':''}>${p.name}</option>`; });
   return html;
 }
@@ -244,106 +330,258 @@ function populateProviderFilter(){
   PROVIDERS.forEach(p=> sel.innerHTML += `<option value="${p.id}">${p.name}</option>`);
   sel.addEventListener('change', function(){
     bcProviderFilter = this.value;
+    bcSuppressAutoExpand = false;
     document.getElementById('bc-provider-filter-hint').textContent = bcProviderFilter
       ? 'Showing only nodes where this provider is the effective provider, expanded.' : '';
     renderHierarchyTree();
   });
 }
 
-// Every tree row — regardless of depth — reserves the SAME total width
-// before the provider select starts, so all dropdowns line up in one
-// vertical column: indent(depth) + fixed icon area(42px) + name width(depth)
-// is constant, since name width shrinks by exactly the indent per level.
+// --- Visible tree model (filtered) --------------------------------------
+function visibleTreeModel(){
+  const q = bcSearchQuery.trim().toLowerCase();
+  const pf = bcProviderFilter;
+  return SPORTS.flatMap(sport=>{
+    const sportTextMatches = !q || sport.name.toLowerCase().includes(q);
+    const groups = groupsForSport(sport.id);
+    let visibleComps = sport.competitions.filter(c=> sportTextMatches || c.name.toLowerCase().includes(q));
+    if (pf) visibleComps = visibleComps.filter(comp=> compEffectiveProviders(sport, comp).includes(pf));
+    if ((q || pf) && visibleComps.length===0) return [];
+    const visibleGroups = groups.map(g=>({
+      group: g,
+      comps: visibleComps.filter(c=> g.competitions.includes(c.id))
+    })).filter(vg=>vg.comps.length>0);
+    const ungrouped = visibleComps.filter(c=> !groups.some(g=>g.competitions.includes(c.id)));
+    return [{ sport, visibleGroups, ungrouped }];
+  });
+}
+
+// --- Helpers for inherit labels ------------------------------------------
+function inheritLabel(parentVal, prefix){
+  return `Inherit · ${providerById(parentVal)?.name || 'none'}`;
+}
+function parentProviderForGroup(sport, phase){
+  const sportVal = pendingOr(`sport:${sport.id}:${phase}`, sport[phase]);
+  if (sportVal) return sportVal;
+  return pendingOr(`global:${phase}`, GLOBAL_DEFAULT[phase]);
+}
+function parentProviderForComp(sport, group, phase){
+  if (group){
+    const grpVal = pendingOr(`group:${group.id}:${phase}`, group[phase]);
+    if (grpVal) return grpVal;
+  }
+  return parentProviderForGroup(sport, phase);
+}
+function parentSecondaryForGroup(sport){
+  const sportVal = pendingOr(`secondary:sport:${sport.id}`, sport.secondary);
+  if (sportVal) return sportVal;
+  return pendingOr(`secondary:global`, GLOBAL_DEFAULT.secondary);
+}
+function parentSecondaryForComp(sport, group){
+  if (group){
+    const grpVal = pendingOr(`secondary:group:${group.id}`, group.secondary);
+    if (grpVal) return grpVal;
+  }
+  return parentSecondaryForGroup(sport);
+}
+
+// --- Render helpers for a single row's 3 provider selects ----------------
+function treeRowSelects(keys, values, inheritLabels, isPendingArr){
+  return ['prematch','inplay'].map((phase,i)=>`
+    <select class="select input-sm" style="width:100%" data-key="${keys[phase]}">
+      ${providerOptions(values[phase], !!inheritLabels, inheritLabels?.[phase])}
+    </select>`).join('') + `
+    <select class="select input-sm" style="width:100%" data-key="${keys.secondary}">
+      ${providerOptionsNullable(values.secondary, inheritLabels ? `None · ${providerById(inheritLabels.secondary)?.name||'none'}` : 'None')}
+    </select>`;
+}
+
+// --- Render the full hierarchy tree --------------------------------------
 function renderHierarchyTree(){
   const root = document.getElementById('hierarchy-tree');
   const q = bcSearchQuery.trim().toLowerCase();
   const pf = bcProviderFilter;
-  root.innerHTML = SPORTS.map(sport=>{
-    const sportKey = `sport:${sport.id}`;
-    const sportVal = (sportKey in pendingHierarchy) ? pendingHierarchy[sportKey] : sport.defaultProvider;
-    const sportTextMatches = !q || sport.name.toLowerCase().includes(q);
+  const model = visibleTreeModel();
+  const autoExpand = (!!q || !!pf) && !bcSuppressAutoExpand;
 
-    let visibleComps = sport.competitions.filter(c=> sportTextMatches || c.name.toLowerCase().includes(q));
-    if (pf) visibleComps = visibleComps.filter(comp=> compEffectiveProviders(sport, comp).includes(pf));
-    if ((q || pf) && visibleComps.length===0) return '';
-    if (q || pf) openTreeNodes.add('sport-'+sport.id);
+  // Global default row
+  const globalPre = pendingOr('global:prematch', GLOBAL_DEFAULT.prematch);
+  const globalInp = pendingOr('global:inplay', GLOBAL_DEFAULT.inplay);
+  const globalSec = pendingOr('secondary:global', GLOBAL_DEFAULT.secondary);
+  const globalPending = ['global:prematch','global:inplay','secondary:global'].some(k=>k in pendingHierarchy);
+  const globalHtml = `
+    <div class="tree-row tree-row--global ${globalPending?'tree-row--pending':''}" style="--depth:1" role="row">
+      <div class="tree-row__lead">
+        ${ic('globe', 16, 'style="color:var(--fg-muted)"')}
+        <span class="name">Global Default</span>
+      </div>
+      <select class="select input-sm" style="width:100%" data-key="global:prematch">
+        ${providerOptions(globalPre, false, '')}
+      </select>
+      <select class="select input-sm" style="width:100%" data-key="global:inplay">
+        ${providerOptions(globalInp, false, '')}
+      </select>
+      <select class="select input-sm" style="width:100%" data-key="secondary:global">
+        ${providerOptionsNullable(globalSec, 'None')}
+      </select>
+      <div class="tree-cell--source"></div>
+      <div class="tree-cell--contains">${SPORTS.length} sport${SPORTS.length===1?'':'s'}</div>
+      <div class="tree-cell--gth"></div>
+      <div class="tree-cell--state">${globalPending?'<span class="badge badge-yellow">unsaved</span>':''}</div>
+    </div>`;
 
-    const isPending = sportKey in pendingHierarchy;
-    const sportOpen = openTreeNodes.has('sport-'+sport.id);
+  const sportsHtml = model.map(({sport, visibleGroups, ungrouped})=>{
+    const sportPre = pendingOr(`sport:${sport.id}:prematch`, sport.prematch);
+    const sportInp = pendingOr(`sport:${sport.id}:inplay`, sport.inplay);
+    const sportSec = pendingOr(`secondary:sport:${sport.id}`, sport.secondary);
+    const sportPending = [`sport:${sport.id}:prematch`,`sport:${sport.id}:inplay`,`secondary:sport:${sport.id}`].some(k=>k in pendingHierarchy);
+    const sportOpen = openTreeNodes.has('sport-'+sport.id) || autoExpand;
+    const totalComps = visibleGroups.reduce((n,vg)=>n+vg.comps.length, 0) + ungrouped.length;
+
+    const renderComp = (comp, group, depth) => {
+      const effPre = resolveProvider(sport.id, comp.id, 'prematch');
+      const effInp = resolveProvider(sport.id, comp.id, 'inplay');
+      const compPre = pendingOr(`comp:${comp.id}:prematch`, comp.prematch);
+      const compInp = pendingOr(`comp:${comp.id}:inplay`, comp.inplay);
+      const compSec = pendingOr(`secondary:comp:${comp.id}`, comp.secondary);
+      const compPending = [`comp:${comp.id}:prematch`,`comp:${comp.id}:inplay`,`secondary:comp:${comp.id}`].some(k=>k in pendingHierarchy);
+      const preMapped = isMapped(effPre.value, comp.id, 'prematch');
+      const inpMapped = isMapped(effInp.value, comp.id, 'inplay');
+      const parentPre = parentProviderForComp(sport, group, 'prematch');
+      const parentInp = parentProviderForComp(sport, group, 'inplay');
+      const parentSec = parentSecondaryForComp(sport, group);
+      const bestSource = [effPre.source, effInp.source].includes('own') ? 'Explicit'
+        : [effPre.source, effInp.source].includes('group') ? '↑ Group'
+        : [effPre.source, effInp.source].includes('sport') ? '↑ Sport' : '↑ Global';
+
+      return `
+      <div class="tree-node">
+        <div class="tree-row ${compPending?'tree-row--pending':''}"
+             style="--depth:${depth}"
+             role="row" aria-level="${depth}">
+          <div class="tree-row__lead">
+            <span class="ic ic-16" style="width:12px"></span>${ICONS.competitionIcon()}
+            <span class="name" title="${comp.name}">${comp.name}</span>
+          </div>
+          <select class="select input-sm" style="width:100%" data-key="comp:${comp.id}:prematch">
+            ${providerOptions(compPre, true, inheritLabel(parentPre))}
+          </select>
+          <select class="select input-sm" style="width:100%" data-key="comp:${comp.id}:inplay">
+            ${providerOptions(compInp, true, inheritLabel(parentInp))}
+          </select>
+          <select class="select input-sm" style="width:100%" data-key="secondary:comp:${comp.id}">
+            ${providerOptionsNullable(compSec, `Inherit · ${providerById(parentSec)?.name||'none'}`)}
+          </select>
+          <div class="tree-cell--source">${bestSource}</div>
+          <div class="tree-cell--contains">${comp.events} event${comp.events===1?'':'s'}</div>
+          <div class="tree-cell--gth">${!preMapped?mapWarningHtml(effPre.value, sport.id, comp.id, 'prematch'):(!inpMapped?mapWarningHtml(effInp.value, sport.id, comp.id, 'inplay'):'')}</div>
+          <div class="tree-cell--state">${compPending?'<span class="badge badge-yellow">unsaved</span>':''}</div>
+        </div>
+      </div>`;
+    };
+
+    const groupsHtml = visibleGroups.map(({group, comps})=>{
+      const grpPre = pendingOr(`group:${group.id}:prematch`, group.prematch);
+      const grpInp = pendingOr(`group:${group.id}:inplay`, group.inplay);
+      const grpSec = pendingOr(`secondary:group:${group.id}`, group.secondary);
+      const grpPending = [`group:${group.id}:prematch`,`group:${group.id}:inplay`,`secondary:group:${group.id}`].some(k=>k in pendingHierarchy);
+      const grpOpen = openTreeNodes.has('group-'+group.id) || autoExpand;
+      const parentPre = parentProviderForGroup(sport, 'prematch');
+      const parentInp = parentProviderForGroup(sport, 'inplay');
+      const parentSec = parentSecondaryForGroup(sport);
+      const effSrc = [grpPre?'own':null, grpInp?'own':null].some(Boolean) ? 'Explicit' : '↑ Sport';
+
+      return `
+      <div class="tree-node">
+        <div class="tree-row tree-row--group ${grpOpen?'open':''} ${grpPending?'tree-row--pending':''}"
+             data-toggle="group-${group.id}" style="--depth:2"
+             role="row" aria-level="2" aria-expanded="${grpOpen}">
+          <div class="tree-row__lead">
+            ${ICONS.chevron()}${ic('layers', 16, 'style="color:var(--fg-muted)"')}
+            <span class="name" title="${group.name}">${group.name}</span>
+            <span class="icon-btn" style="width:20px;height:20px;margin-left:2px;" onclick="event.stopPropagation();openGroupDrawer('${group.id}')" title="Edit group">${ICONS.edit()}</span>
+          </div>
+          <select class="select input-sm" style="width:100%" data-key="group:${group.id}:prematch">
+            ${providerOptions(grpPre, true, inheritLabel(parentPre))}
+          </select>
+          <select class="select input-sm" style="width:100%" data-key="group:${group.id}:inplay">
+            ${providerOptions(grpInp, true, inheritLabel(parentInp))}
+          </select>
+          <select class="select input-sm" style="width:100%" data-key="secondary:group:${group.id}">
+            ${providerOptionsNullable(grpSec, `Inherit · ${providerById(parentSec)?.name||'none'}`)}
+          </select>
+          <div class="tree-cell--source">${effSrc}</div>
+          <div class="tree-cell--contains">${comps.length} comp${comps.length===1?'':'s'}</div>
+          <div class="tree-cell--gth"></div>
+          <div class="tree-cell--state">${grpPending?'<span class="badge badge-yellow">unsaved</span>':''}</div>
+        </div>
+        <div class="tree-children ${grpOpen?'open':''}" id="group-${group.id}">
+          ${comps.map(c=>renderComp(c, group, 3)).join('')}
+        </div>
+      </div>`;
+    }).join('');
+
+    const ungroupedHtml = ungrouped.map(c=>renderComp(c, null, 2)).join('');
+
     return `
-    <div class="tree-node" data-sport="${sport.id}">
-      <div class="tree-row ${sportOpen?'open':''}" data-toggle="sport-${sport.id}" style="${isPending?'background:var(--bg-warning);':''}">
-        ${ICONS.chevron}
-        ${ICONS.sportIcon}
-        <span class="name tree-name" style="width:${TREE_NAME_BASE}px;">${sport.name}</span>
-        <select class="select input-sm" style="width:180px;margin-left:8px;" onclick="event.stopPropagation()" onchange="onHierarchyChange('${sportKey}', this.value)">
-          ${providerOptions(sportVal, false, '')}
+    <div class="tree-node">
+      <div class="tree-row ${sportOpen?'open':''} ${sportPending?'tree-row--pending':''}"
+           data-toggle="sport-${sport.id}" style="--depth:1"
+           role="row" aria-level="1" aria-expanded="${sportOpen}">
+        <div class="tree-row__lead">
+          ${ICONS.chevron()}${ICONS.sportIcon()}
+          <span class="name" title="${sport.name}">${sport.name}</span>
+        </div>
+        <select class="select input-sm" style="width:100%" data-key="sport:${sport.id}:prematch">
+          ${providerOptions(sportPre, true, inheritLabel(pendingOr('global:prematch', GLOBAL_DEFAULT.prematch)))}
         </select>
-        <div class="tree-row__meta">
-          <span class="count">${visibleComps.length} competitions</span>
-          ${isPending?'<span class="badge badge-yellow">unsaved</span>':''}
+        <select class="select input-sm" style="width:100%" data-key="sport:${sport.id}:inplay">
+          ${providerOptions(sportInp, true, inheritLabel(pendingOr('global:inplay', GLOBAL_DEFAULT.inplay)))}
+        </select>
+        <select class="select input-sm" style="width:100%" data-key="secondary:sport:${sport.id}">
+          ${providerOptionsNullable(sportSec, `Inherit · ${providerById(pendingOr('secondary:global', GLOBAL_DEFAULT.secondary))?.name||'none'}`)}
+        </select>
+        <div class="tree-cell--source"></div>
+        <div class="tree-cell--contains">${totalComps} comp${totalComps===1?'':'s'}</div>
+        <div class="tree-cell--gth"></div>
+        <div class="tree-cell--state">${sportPending?'<span class="badge badge-yellow">unsaved</span>':''}</div>
+      </div>
+      <div class="tree-children ${sportOpen?'open':''}" id="sport-${sport.id}">
+        ${groupsHtml}${ungroupedHtml}
+        <div class="tree-row" style="--depth:2;cursor:pointer;color:var(--fg-muted);" onclick="createNewGroup('${sport.id}')">
+          <div class="tree-row__lead">
+            <span class="ic ic-16" style="width:12px"></span>
+            ${ic('plus', 16, 'style="color:var(--fg-muted)"')}
+            <span style="font-size:var(--fs-xs);">New group</span>
+          </div>
+          <div></div><div></div><div></div><div></div><div></div><div></div><div></div>
         </div>
       </div>
-      <div class="tree-children tree-lvl2 ${sportOpen?'open':''}" id="sport-${sport.id}">
-        ${visibleComps.map(comp=>{
-          const compKey = `comp:${comp.id}`;
-          const eff = effectiveCompProvider(sport, comp);
-          const isPendingComp = compKey in pendingHierarchy;
-          const mapped = isMapped(eff.value, comp.id);
-          const compOpen = openTreeNodes.has('comp-'+comp.id) || !!q || !!pf;
-          return `
-          <div class="tree-node" data-comp="${comp.id}">
-            <div class="tree-row ${compOpen?'open':''}" data-toggle="comp-${comp.id}" style="${isPendingComp?'background:var(--bg-warning);':''}">
-              ${ICONS.chevron}
-              ${ICONS.competitionIcon}
-              <span class="name tree-name" style="width:${TREE_NAME_BASE-30}px;">${comp.name}</span>
-              <select class="select input-sm" style="width:180px;margin-left:8px;" onclick="event.stopPropagation()" onchange="onHierarchyChange('${compKey}', this.value)">
-                ${providerOptions(compKey in pendingHierarchy ? pendingHierarchy[compKey] : comp.defaultProvider, true, `Inherit from ${sport.name} (${providerById(sportVal)?.name||'none'})`)}
-              </select>
-              <div class="tree-row__meta">
-                ${!mapped ? mapWarningHtml(eff.value, sport.id, comp.id, null) : ''}
-                <span class="count">${comp.events} events</span>
-                ${isPendingComp?'<span class="badge badge-yellow">unsaved</span>':''}
-              </div>
-            </div>
-            <div class="tree-children tree-lvl3 ${compOpen?'open':''}" id="comp-${comp.id}">
-              ${['prematch','inplay'].map(mt=>{
-                const key = `${comp.id}:${mt}`;
-                const label = mt==='prematch' ? 'Pre-Match' : 'In-Play';
-                const eff2 = effectiveMatchTypeProvider(sport, comp, mt);
-                const isPendingMt = key in pendingHierarchy;
-                const mtMapped = isMapped(eff2.value, comp.id, mt);
-                return `
-                <div class="tree-row" style="${isPendingMt?'background:var(--bg-warning);':''}">
-                  <span style="width:12px;flex:none;"></span>
-                  <span style="width:14px;height:14px;display:inline-flex;align-items:center;justify-content:center;flex:none;"><span class="matchtype-dot ${mt}"></span></span>
-                  <span class="name tree-name" style="font-weight:500;width:${TREE_NAME_BASE-60}px;">${label}</span>
-                  <select class="select input-sm" style="width:180px;margin-left:8px;" onchange="onHierarchyChange('${key}', this.value)">
-                    ${providerOptions(key in pendingHierarchy ? pendingHierarchy[key] : (MATCHTYPE_DEFAULTS[key]||''), true, `Inherit (${providerById(eff2.value)?.name || 'none'})`)}
-                  </select>
-                  <div class="tree-row__meta">
-                    ${!mtMapped ? mapWarningHtml(eff2.value, sport.id, comp.id, mt) : ''}
-                    ${isPendingMt?'<span class="badge badge-yellow">unsaved</span>':''}
-                  </div>
-                </div>`;
-              }).join('')}
-            </div>
-          </div>`;
-        }).join('')}
-      </div>
     </div>`;
-  }).join('') || `<div class="empty-state">No sports or competitions match the current filters.</div>`;
+  }).join('') || `<div class="empty-state" style="padding:var(--sp-4)">No sports or competitions match the current filters.</div>`;
 
-  root.querySelectorAll('[data-toggle]').forEach(row=>{
-    row.addEventListener('click', ()=>{
-      const id = row.dataset.toggle;
-      if (openTreeNodes.has(id)) openTreeNodes.delete(id); else openTreeNodes.add(id);
-      row.classList.toggle('open');
-      document.getElementById(id).classList.toggle('open');
-    });
-  });
+  root.innerHTML = globalHtml + sportsHtml;
   updatePendingBar();
 }
+
+// Delegated listeners — bound once, survive every re-render
+(function(){
+  const root = document.getElementById('hierarchy-tree');
+  root.addEventListener('click', e=>{
+    if (e.target.closest('select, .map-warning, a')) return;
+    const row = e.target.closest('[data-toggle]');
+    if (!row) return;
+    const id = row.dataset.toggle;
+    if (openTreeNodes.has(id)) openTreeNodes.delete(id); else openTreeNodes.add(id);
+    row.classList.toggle('open');
+    document.getElementById(id).classList.toggle('open');
+    row.setAttribute('aria-expanded', openTreeNodes.has(id));
+  });
+  root.addEventListener('change', e=>{
+    const sel = e.target.closest('select[data-key]');
+    if (sel) onHierarchyChange(sel.dataset.key, sel.value);
+  });
+})();
 
 function onHierarchyChange(key, value){
   pendingHierarchy[key] = value || null;
@@ -352,84 +590,246 @@ function onHierarchyChange(key, value){
 function updatePendingBar(){
   const n = Object.keys(pendingHierarchy).length;
   document.getElementById('bc-save').disabled = n===0;
-  document.getElementById('bc-pending-alert').style.display = n>0 ? 'block' : 'none';
-  document.getElementById('bc-pending-count').textContent = ` ${n}`;
+  document.getElementById('bc-action-bar').classList.toggle('open', n>0);
+  document.getElementById('bc-pending-count').textContent = n;
 }
+document.getElementById('bc-discard').addEventListener('click', ()=>{
+  for (const k in pendingHierarchy) delete pendingHierarchy[k];
+  renderHierarchyTree();
+});
 document.getElementById('bc-expand-all').addEventListener('click', ()=>{
-  SPORTS.forEach(s=>{ openTreeNodes.add('sport-'+s.id); s.competitions.forEach(c=>openTreeNodes.add('comp-'+c.id)); });
+  bcSuppressAutoExpand = false;
+  SPORTS.forEach(s=>{
+    openTreeNodes.add('sport-'+s.id);
+    groupsForSport(s.id).forEach(g=>openTreeNodes.add('group-'+g.id));
+  });
   renderHierarchyTree();
 });
 document.getElementById('bc-collapse-all').addEventListener('click', ()=>{
   openTreeNodes.clear();
+  bcSuppressAutoExpand = true;
   renderHierarchyTree();
 });
 document.getElementById('bc-export').addEventListener('click', ()=>{
-  const headers = ['Sport','Competition','Match Type','Effective Provider','Source','GTH Mapped'];
+  const headers = ['Sport','Group','Competition','Phase','Primary Provider','Source','Secondary','GTH Mapped'];
   const rows = [];
-  SPORTS.forEach(sport=> sport.competitions.forEach(comp=>{
-    ['prematch','inplay'].forEach(mt=>{
-      const eff = effectiveMatchTypeProvider(sport, comp, mt);
-      rows.push([sport.name, comp.name, mt==='prematch'?'Pre-Match':'In-Play', providerById(eff.value)?.name || '(none)', eff.source, isMapped(eff.value, comp.id, mt)?'Yes':'No']);
-    });
-  }));
-  downloadCSV('blending_configuration.csv', headers, rows);
-  toast('success','Export ready', 'blending_configuration.csv downloaded.');
+  visibleTreeModel().forEach(({sport, visibleGroups, ungrouped})=>{
+    const addComp = (comp, groupName)=>{
+      ['prematch','inplay'].forEach(phase=>{
+        const eff = resolveProvider(sport.id, comp.id, phase);
+        const sec = resolveSecondary(sport.id, comp.id);
+        rows.push([sport.name, groupName, comp.name, phase==='prematch'?'Pre-Match':'In-Play',
+          providerById(eff.value)?.name||'(none)', eff.source,
+          providerById(sec.value)?.name||'(none)',
+          isMapped(eff.value, comp.id, phase)?'Yes':'No']);
+      });
+    };
+    visibleGroups.forEach(({group, comps})=> comps.forEach(c=>addComp(c, group.name)));
+    ungrouped.forEach(c=>addComp(c, '(ungrouped)'));
+  });
+  const totalRows = SPORTS.reduce((n,s)=> n + s.competitions.length * 2, 0);
+  const filtered = rows.length < totalRows;
+  const filename = filtered ? 'blending_configuration_filtered.csv' : 'blending_configuration.csv';
+  downloadCSV(filename, headers, rows);
+  toast('success','Export ready', filtered
+    ? `${filename} — ${rows.length} of ${totalRows} rows (current filters applied).`
+    : `${filename} — ${rows.length} rows.`);
 });
 
 document.getElementById('bc-save').addEventListener('click', ()=>{
-  // validate every pending change against GTH mapping
   const unmapped = [];
   Object.entries(pendingHierarchy).forEach(([key, providerId])=>{
     if (!providerId) return;
+    if (key.startsWith('global:') || key.startsWith('secondary:')) return;
     if (key.startsWith('sport:')){
-      const sportId = key.split(':')[1];
+      const parts = key.split(':');
+      const sportId = parts[1];
       const sport = SPORTS.find(s=>s.id===sportId);
       sport.competitions.forEach(c=>{ if(!isMapped(providerId, c.id)) unmapped.push({providerId, path:`${providerById(providerId).name} → ${sport.name} → ${c.name}`}); });
+    } else if (key.startsWith('group:')){
+      const parts = key.split(':');
+      const groupId = parts[1];
+      const group = GROUPS.find(g=>g.id===groupId);
+      if (group) group.competitions.forEach(compId=>{
+        if(!isMapped(providerId, compId)) unmapped.push({providerId, path:`${providerById(providerId).name} → ${group.name} → ${competitionName(compId)}`});
+      });
     } else if (key.startsWith('comp:')){
-      const compId = key.split(':')[1];
-      const comp = SPORTS.flatMap(s=>s.competitions).find(c=>c.id===compId);
-      if (!isMapped(providerId, compId)) unmapped.push({providerId, path:`${providerById(providerId).name} → ${comp.name}`});
-    } else {
-      const [compId, mt] = key.split(':');
-      const comp = SPORTS.flatMap(s=>s.competitions).find(c=>c.id===compId);
-      if (!isMapped(providerId, compId, mt)) unmapped.push({providerId, path:`${providerById(providerId).name} → ${comp.name} → ${mt==='prematch'?'Pre-Match':'In-Play'}`});
+      const parts = key.split(':');
+      const compId = parts[1];
+      if (!isMapped(providerId, compId)) unmapped.push({providerId, path:`${providerById(providerId).name} → ${competitionName(compId)}`});
+    } else if (key.startsWith('mt:')){
+      const parts = key.split(':');
+      const compId = parts[1];
+      if (!isMapped(providerId, compId)) unmapped.push({providerId, path:`${providerById(providerId).name} → ${competitionName(compId)} → ${parts[2]}`});
     }
   });
   if (unmapped.length){
     document.getElementById('validation-unmapped-items').innerHTML = unmapped.map(u=>`
       <div class="alert alert-warning" style="margin-bottom:8px;">
-        ${ICONS.alert} <div><strong>${u.path}</strong>No confirmed mapping to internal GTH hierarchy.</div>
+        ${ICONS.alert()} <div><strong>${u.path}</strong>No confirmed mapping to internal GTH hierarchy.</div>
       </div>`).join('');
     openOverlay('overlay-validation');
     return;
   }
   const count = Object.keys(pendingHierarchy).length;
   Object.entries(pendingHierarchy).forEach(([key,val])=>{
-    logAudit('Level 1 — Blending Config', 'Default provider changed', `${key} → ${val?providerById(val).name:'(inherit)'}`);
-    if (key.startsWith('sport:')){
-      SPORTS.find(s=>s.id===key.split(':')[1]).defaultProvider = val;
+    logAudit('Level 1 — Blending Config', 'Provider changed', `${key} → ${val?providerById(val).name:'(inherit)'}`);
+    if (key.startsWith('global:')){
+      const phase = key.split(':')[1];
+      GLOBAL_DEFAULT[phase] = val;
+    } else if (key.startsWith('sport:')){
+      const parts = key.split(':');
+      const sport = SPORTS.find(s=>s.id===parts[1]);
+      sport[parts[2]] = val;
+    } else if (key.startsWith('group:')){
+      const parts = key.split(':');
+      const group = GROUPS.find(g=>g.id===parts[1]);
+      if (group) group[parts[2]] = val;
     } else if (key.startsWith('comp:')){
-      SPORTS.flatMap(s=>s.competitions).find(c=>c.id===key.split(':')[1]).defaultProvider = val;
-    } else if (val){
-      MATCHTYPE_DEFAULTS[key] = val;
-    } else {
-      delete MATCHTYPE_DEFAULTS[key];
+      const parts = key.split(':');
+      const comp = SPORTS.flatMap(s=>s.competitions).find(c=>c.id===parts[1]);
+      comp[parts[2]] = val;
+    } else if (key.startsWith('secondary:')){
+      const rest = key.replace('secondary:','');
+      if (rest === 'global') GLOBAL_DEFAULT.secondary = val;
+      else if (rest.startsWith('sport:')) SPORTS.find(s=>s.id===rest.split(':')[1]).secondary = val;
+      else if (rest.startsWith('group:')){ const g=GROUPS.find(g=>g.id===rest.split(':')[1]); if(g) g.secondary=val; }
+      else if (rest.startsWith('comp:')) SPORTS.flatMap(s=>s.competitions).find(c=>c.id===rest.split(':')[1]).secondary = val;
+    } else if (key.startsWith('mt:')){
+      const parts = key.slice(3).split(':');
+      const compId = parts[0];
+      const marketType = parts.slice(1, -1).join(':');
+      const phase = parts[parts.length-1];
+      const mtKey = `${compId}:${marketType}`;
+      if (!MARKET_TYPE_DEFAULTS[mtKey]) MARKET_TYPE_DEFAULTS[mtKey] = { prematch:null, inplay:null };
+      MARKET_TYPE_DEFAULTS[mtKey][phase] = val;
     }
   });
   Object.keys(pendingHierarchy).forEach(k=>delete pendingHierarchy[k]);
   renderHierarchyTree();
   renderEventsTable();
-  toast('success', 'Configuration saved', `${count} level(s) updated. New events under these nodes will auto-assign to the selected provider.`);
+  toast('success', 'Configuration saved', `${count} level(s) updated.`);
 });
 document.getElementById('validation-goto-mappings').addEventListener('click', ()=>{
   closeOverlay('overlay-validation');
-  document.querySelector('.nav-item[data-view="mappings"]').click();
+  goToView('mappings');
+});
+
+/* ============================================================
+   GROUP MANAGEMENT — drawer for create / edit / delete groups
+   ============================================================ */
+let editingGroupId = null;
+let editingGroupDraft = null; // { name, sportId, competitions:[] }
+
+function createNewGroup(sportId){
+  const sport = SPORTS.find(s=>s.id===sportId);
+  const existing = groupsForSport(sportId);
+  const letter = String.fromCharCode(65 + existing.length); // A, B, C...
+  const newId = `grp-${sportId}-${Date.now()}`;
+  const newGroup = {
+    id: newId, sportId, name:`Group ${letter} — New`,
+    prematch:null, inplay:null, secondary:null, competitions:[]
+  };
+  GROUPS.push(newGroup);
+  openTreeNodes.add('sport-'+sportId);
+  renderHierarchyTree();
+  openGroupDrawer(newId);
+  logAudit('Level 1 — Blending Config', 'Group created', `${sport.name} → ${newGroup.name}`);
+}
+
+function openGroupDrawer(groupId){
+  const group = GROUPS.find(g=>g.id===groupId);
+  if (!group) return;
+  editingGroupId = groupId;
+  editingGroupDraft = { name:group.name, sportId:group.sportId, competitions:[...group.competitions] };
+  const sport = SPORTS.find(s=>s.id===group.sportId);
+  document.getElementById('group-drawer-title').textContent = 'Edit Group';
+  document.getElementById('group-drawer-subtitle').textContent = sport.name;
+  renderGroupDrawerBody();
+  openDrawer('drawer-group');
+}
+
+function renderGroupDrawerBody(){
+  const g = editingGroupDraft;
+  const sport = SPORTS.find(s=>s.id===g.sportId);
+  const assignedComps = g.competitions.map(cid=> sport.competitions.find(c=>c.id===cid)).filter(Boolean);
+  const allSportComps = sport.competitions;
+  const unassigned = allSportComps.filter(c=>
+    !g.competitions.includes(c.id) &&
+    !GROUPS.some(og=> og.id !== editingGroupId && og.competitions.includes(c.id))
+  );
+
+  document.getElementById('group-drawer-body').innerHTML = `
+    <label class="group-section-label">Group name</label>
+    <input class="input group-name-input" id="group-name-field" value="${g.name}" placeholder="Group name">
+
+    <label class="group-section-label">Competitions (${assignedComps.length})</label>
+    ${assignedComps.length ? assignedComps.map(c=>`
+      <div class="group-member">
+        <span class="group-member__name">${c.name}</span>
+        <span class="group-member__events">${c.events} events</span>
+        <span class="group-member__remove" onclick="removeCompFromGroup('${c.id}')" title="Remove from group">${ICONS.x()}</span>
+      </div>`).join('') : '<div class="group-empty">No competitions assigned yet.</div>'}
+
+    ${unassigned.length ? `
+      <div class="group-add-row">
+        <select class="select input-sm" id="group-add-comp">
+          <option value="">Add a competition…</option>
+          ${unassigned.map(c=>`<option value="${c.id}">${c.name}</option>`).join('')}
+        </select>
+        <button class="btn btn-sm btn-tertiary" onclick="addCompToGroup()">Add</button>
+      </div>` : '<div class="group-empty" style="margin-top:var(--sp-2)">All competitions in this sport are assigned to groups.</div>'}
+
+    <div class="alert alert-info" style="margin-top:var(--sp-4)">
+      ${ic('circle-alert', 16)} <div>Groups cascade provider defaults to their competitions. Competitions can still override at their own level. <strong>Q2 open:</strong> seedable from existing groupings — built as new for now.</div>
+    </div>
+  `;
+}
+
+function removeCompFromGroup(compId){
+  editingGroupDraft.competitions = editingGroupDraft.competitions.filter(id=>id!==compId);
+  renderGroupDrawerBody();
+}
+function addCompToGroup(){
+  const sel = document.getElementById('group-add-comp');
+  if (!sel.value) return;
+  editingGroupDraft.competitions.push(sel.value);
+  renderGroupDrawerBody();
+}
+
+document.getElementById('group-save').addEventListener('click', ()=>{
+  const group = GROUPS.find(g=>g.id===editingGroupId);
+  if (!group) return;
+  const nameField = document.getElementById('group-name-field');
+  const oldName = group.name;
+  group.name = nameField.value.trim() || oldName;
+  group.competitions = [...editingGroupDraft.competitions];
+  closeDrawer('drawer-group');
+  renderHierarchyTree();
+  logAudit('Level 1 — Blending Config', 'Group updated', `${group.name}: ${group.competitions.length} competition(s)`);
+  toast('success', 'Group saved', `${group.name} updated.`);
+});
+
+document.getElementById('group-delete').addEventListener('click', ()=>{
+  const group = GROUPS.find(g=>g.id===editingGroupId);
+  if (!group) return;
+  const idx = GROUPS.indexOf(group);
+  if (idx >= 0) GROUPS.splice(idx, 1);
+  closeDrawer('drawer-group');
+  renderHierarchyTree();
+  logAudit('Level 1 — Blending Config', 'Group deleted', `${group.name} removed — competitions now inherit from sport`);
+  toast('success', 'Group deleted', `${group.name} removed. Its competitions now inherit directly from ${sportName(group.sportId)}.`);
 });
 
 /* ============================================================
    LEVEL 2 — EVENT OVERRIDES
+   Overrides are staged in eoPending (confirm-to-save), one event at a
+   time — no multi-select. Key: `${eventId}:${matchType}` -> providerId
+   | null (null = revert to default).
    ============================================================ */
-let selectedEvents = new Set();
+const eoPending = {};
+let eoCustomRange = null; // { from:Date, to:Date } when the range filter is 'custom'
+function eoKey(id, mt){ return `${id}:${mt}`; }
 
 function populateEventFilters(){
   const sportSel = document.getElementById('eo-filter-sport');
@@ -441,8 +841,13 @@ function populateEventFilters(){
     if (sport) sport.competitions.forEach(c=> compSel.innerHTML += `<option value="${c.id}">${c.name}</option>`);
     renderEventsTable();
   });
-  ['eo-filter-competition','eo-filter-status','eo-filter-range','eo-filter-override'].forEach(id=>{
+  ['eo-filter-competition','eo-filter-status','eo-filter-override'].forEach(id=>{
     document.getElementById(id).addEventListener('change', renderEventsTable);
+  });
+  // Range: 'custom' opens the date-range picker; anything else filters directly
+  document.getElementById('eo-filter-range').addEventListener('change', function(){
+    if (this.value === 'custom') openDateRangeModal();
+    else { eoCustomRange = null; renderEventsTable(); }
   });
 }
 
@@ -457,12 +862,16 @@ function filteredEvents(){
     if (sport && e.sport !== sport) return false;
     if (comp && e.competition !== comp) return false;
     if (status && e.status !== status) return false;
-    if (range !== 'custom'){
+    if (range === 'custom'){
+      if (eoCustomRange){
+        if (e.start < eoCustomRange.from || e.start > eoCustomRange.to) return false;
+      }
+    } else {
       const maxH = parseInt(range,10)*24;
       const diffH = (e.start - now)/3600000;
       if (diffH > maxH || diffH < -6) return false;
     }
-    const overridden = !!(e.overrides.prematch || e.overrides.inplay);
+    const overridden = eventOverridden(e);
     if (hasOverride === 'yes' && !overridden) return false;
     if (hasOverride === 'no' && overridden) return false;
     if (q && !(e.id.toLowerCase().includes(q) || e.name.toLowerCase().includes(q))) return false;
@@ -470,15 +879,28 @@ function filteredEvents(){
   }).sort((a,b)=>a.start-b.start);
 }
 
-// The effective provider for a slot is always computed live from the Level-1
-// hierarchy, unless this event has an override for that specific slot.
+// Effective + committed/pending state for a slot. Pending wins over the
+// saved override, which wins over the live Level-1 default.
 function effectiveEventProvider(evt, matchType){
-  const ov = evt.overrides[matchType];
-  if (ov) return { value: ov.provider, overridden:true, meta:ov };
+  const pk = eoKey(evt.id, matchType);
   const sport = sportByCompetitionId(evt.competition);
   const comp = sport.competitions.find(c=>c.id===evt.competition);
-  const eff = effectiveMatchTypeProvider(sport, comp, matchType);
-  return { value: eff.value, overridden:false };
+  const dflt = effectiveMatchTypeProvider(sport, comp, matchType).value;
+  if (pk in eoPending){
+    const v = eoPending[pk];
+    return v ? { value:v, overridden:true, pending:true } : { value:dflt, overridden:false, pending:true };
+  }
+  const ov = evt.overrides[matchType];
+  if (ov) return { value: ov.provider, overridden:true, pending:false, meta:ov };
+  return { value: dflt, overridden:false, pending:false };
+}
+// Overridden = has a committed override, or a pending non-revert change
+function eventOverridden(evt){
+  return ['prematch','inplay'].some(mt=>{
+    const pk = eoKey(evt.id, mt);
+    if (pk in eoPending) return !!eoPending[pk];
+    return !!evt.overrides[mt];
+  });
 }
 
 function inlineProviderSelect(evt, matchType){
@@ -489,21 +911,26 @@ function inlineProviderSelect(evt, matchType){
   const defaultProv = effectiveMatchTypeProvider(sport, comp, matchType).value;
   const options = `<option value="">Use default (${providerById(defaultProv)?.name || 'none'})</option>` +
     PROVIDERS.map(p=>`<option value="${p.id}" ${eff.overridden && eff.value===p.id ? 'selected' : ''}>${p.name}</option>`).join('');
-  const cls = eff.overridden ? 'override-select override-select--active' : 'override-select';
+  const cls = 'override-select' + (eff.overridden ? ' override-select--active' : '') + (eff.pending ? ' override-select--pending' : '');
   const errStyle = !mapped ? 'border-color:var(--border-error);' : '';
+  const flag = eff.pending ? '<span class="badge badge-yellow" style="margin-left:6px;">unsaved</span>' : '';
   const select = `<select class="select input-sm ${cls}" style="width:170px;${errStyle}" onchange="onInlineOverrideChange('${evt.id}','${matchType}', this.value)">${options}</select>`;
-  if (mapped) return select;
-  return `<div class="flex-gap-1">${select}${mapWarningHtml(eff.value, sport.id, comp.id, matchType)}</div>`;
+  const warn = mapped ? '' : mapWarningHtml(eff.value, sport.id, comp.id, matchType);
+  return `<div class="flex-gap-1">${select}${warn}${flag}</div>`;
 }
 
 function renderEventsTable(){
   const rows = filteredEvents();
-  document.getElementById('eo-result-count').textContent = `${rows.length} event${rows.length!==1?'s':''}`;
+  document.getElementById('eo-result-count').textContent = rows.length;
+  const rangeSel = document.getElementById('eo-filter-range');
+  document.getElementById('eo-range-label').textContent =
+    (rangeSel.value === 'custom' && eoCustomRange)
+      ? `${fmtDate(eoCustomRange.from)} — ${fmtDate(eoCustomRange.to)}`
+      : rangeSel.options[rangeSel.selectedIndex].text;
   document.getElementById('events-tbody').innerHTML = rows.map(e=>{
-    const overridden = !!(e.overrides.prematch || e.overrides.inplay);
+    const overridden = eventOverridden(e);
     return `
-    <tr data-evt="${e.id}" class="${selectedEvents.has(e.id)?'selected':''} ${overridden?'row-override':''}">
-      <td><div class="checkbox ${selectedEvents.has(e.id)?'checked':''}" onclick="toggleEventSelect('${e.id}')">${selectedEvents.has(e.id)?ICONS.check:''}</div></td>
+    <tr data-evt="${e.id}" class="${overridden?'row-override':''}">
       <td><strong>${e.name}</strong><br><span class="mono">${e.id}</span></td>
       <td>${competitionName(e.competition)}</td>
       <td>${fmtDate(e.start)}<br><span class="muted" style="font-size:11px;">${relTime(e.start)}</span></td>
@@ -511,77 +938,125 @@ function renderEventsTable(){
       <td>${inlineProviderSelect(e,'prematch')}</td>
       <td>${inlineProviderSelect(e,'inplay')}</td>
     </tr>`;
-  }).join('') || `<tr><td colspan="7"><div class="empty-state">No events match these filters.</div></td></tr>`;
+  }).join('') || `<tr><td colspan="6"><div class="empty-state">No events match these filters.</div></td></tr>`;
+  updateEoPendingBar();
 }
-function toggleEventSelect(id){
-  if (selectedEvents.has(id)) selectedEvents.delete(id); else selectedEvents.add(id);
-  renderEventsTable();
-  const bar = document.getElementById('eo-bulk-bar');
-  bar.style.display = selectedEvents.size>0 ? 'flex' : 'none';
-  document.getElementById('eo-selected-count').textContent = `${selectedEvents.size} selected`;
-}
-document.getElementById('eo-bulk-clear').addEventListener('click', ()=>{ selectedEvents.clear(); renderEventsTable(); document.getElementById('eo-bulk-bar').style.display='none'; });
 
+// Stage a single-event, single-slot change — nothing commits until Save.
 function onInlineOverrideChange(eventId, matchType, value){
   const evt = EVENTS.find(e=>e.id===eventId);
-  const label = matchType==='prematch' ? 'Pre-Match' : 'In-Play';
-  if (!value){
-    evt.overrides[matchType] = null;
-    logAudit('Level 2 — Event Overrides','Override cleared',`${evt.id}: ${label} reverted to default`);
-    toast('default','Reverted to default', `${evt.name} — ${label}`);
-  } else {
-    evt.overrides[matchType] = { provider:value, at:new Date().toISOString(), by:'m.tato' };
-    const mapped = isMapped(value, evt.competition, matchType);
-    logAudit('Level 2 — Event Overrides','Override applied',`${evt.id}: ${label} → ${providerById(value).name}`);
-    if (!mapped) toast('warning','Override applied — mapping conflict', `${providerById(value).name} isn't mapped to this competition yet.`);
-    else toast('success','Override applied', `${evt.name} — ${label} → ${providerById(value).name}`);
-  }
+  const pk = eoKey(eventId, matchType);
+  const committed = evt.overrides[matchType] ? evt.overrides[matchType].provider : '';
+  // If the new value matches what's already committed, drop the pending entry
+  if ((value || '') === (committed || '')) delete eoPending[pk];
+  else eoPending[pk] = value || null;
   renderEventsTable();
 }
 
-// Bulk override (multi-select) still uses a drawer — the one case a single
-// inline cell can't cover.
-function openBulkOverrideDrawer(bulkIds){
-  document.getElementById('override-drawer-title').textContent = `Bulk override — ${bulkIds.length} events`;
-  document.getElementById('override-drawer-subtitle').textContent = 'Applies the selected provider(s) to every selected event. Leave a field blank to not touch that slot.';
-  document.getElementById('override-drawer-body').innerHTML = `
-    <div class="field">
-      <label>Pre-Match provider</label>
-      <select class="select" id="ov-prematch">
-        <option value="">Don't change</option>
-        ${PROVIDERS.map(p=>`<option value="${p.id}">${p.name}</option>`).join('')}
-      </select>
-    </div>
-    <div class="field">
-      <label>In-Play provider</label>
-      <select class="select" id="ov-inplay">
-        <option value="">Don't change</option>
-        ${PROVIDERS.map(p=>`<option value="${p.id}">${p.name}</option>`).join('')}
-      </select>
-    </div>
-  `;
-  document.getElementById('override-apply').onclick = () => {
-    const pre = document.getElementById('ov-prematch').value;
-    const inp = document.getElementById('ov-inplay').value;
-    bulkIds.map(id=>EVENTS.find(ev=>ev.id===id)).forEach(ev=>{
-      if (pre){ ev.overrides.prematch = {provider:pre, at:new Date().toISOString(), by:'m.tato'}; logAudit('Level 2 — Event Overrides','Override applied (bulk)',`${ev.id}: Pre-Match → ${providerById(pre).name}`); }
-      if (inp){ ev.overrides.inplay = {provider:inp, at:new Date().toISOString(), by:'m.tato'}; logAudit('Level 2 — Event Overrides','Override applied (bulk)',`${ev.id}: In-Play → ${providerById(inp).name}`); }
-    });
-    closeDrawer('drawer-override');
-    renderEventsTable();
-    toast('success', 'Bulk override applied', `${bulkIds.length} events updated.`);
-    selectedEvents.clear();
-    document.getElementById('eo-bulk-bar').style.display = 'none';
-  };
-  openDrawer('drawer-override');
+function updateEoPendingBar(){
+  const n = Object.keys(eoPending).length;
+  document.getElementById('eo-pending-count').textContent = n;
+  document.getElementById('eo-save').disabled = n===0;
+  document.getElementById('eo-action-bar').classList.toggle('open', n>0);
 }
-document.getElementById('eo-bulk-override').addEventListener('click', ()=> openBulkOverrideDrawer(Array.from(selectedEvents)));
+function eoPendingSummary(){
+  return Object.entries(eoPending).map(([pk, val])=>{
+    const [id, mt] = pk.split(':');
+    const evt = EVENTS.find(e=>e.id===id);
+    const label = mt==='prematch' ? 'Pre-Match' : 'In-Play';
+    const target = val ? providerById(val).name : 'Default (revert)';
+    const mapped = val ? isMapped(val, evt.competition, mt) : true;
+    return { evt, label, target, mapped };
+  });
+}
+document.getElementById('eo-discard').addEventListener('click', ()=>{
+  for (const k in eoPending) delete eoPending[k];
+  renderEventsTable();
+});
+document.getElementById('eo-save').addEventListener('click', ()=>{
+  const entries = eoPendingSummary();
+  Object.entries(eoPending).forEach(([pk, val])=>{
+    const [id, mt] = pk.split(':');
+    const evt = EVENTS.find(e=>e.id===id);
+    const label = mt==='prematch' ? 'Pre-Match' : 'In-Play';
+    if (val){
+      evt.overrides[mt] = { provider:val, at:new Date().toISOString(), by:'m.tato' };
+      logAudit('Level 2 — Event Overrides','Override applied',`${evt.id}: ${label} → ${providerById(val).name}`);
+    } else {
+      evt.overrides[mt] = null;
+      logAudit('Level 2 — Event Overrides','Override cleared',`${evt.id}: ${label} reverted to default`);
+    }
+  });
+  const n = Object.keys(eoPending).length;
+  const anyUnmapped = entries.some(e=>!e.mapped);
+  for (const k in eoPending) delete eoPending[k];
+  closeDrawer('drawer-override');
+  renderEventsTable();
+  if (anyUnmapped) toast('warning','Overrides saved — mapping conflict', `${n} change(s) saved; one or more providers aren't mapped to their competition yet.`);
+  else toast('success','Overrides saved', `${n} change(s) applied.`);
+});
+// "Review…" — the side drawer lists the staged changes to confirm & apply
+document.getElementById('eo-review').addEventListener('click', ()=>{
+  const entries = eoPendingSummary();
+  document.getElementById('override-drawer-title').textContent = 'Review overrides';
+  document.getElementById('override-drawer-subtitle').textContent = `${entries.length} staged change(s) — confirm to apply, or close to keep editing.`;
+  document.getElementById('override-drawer-body').innerHTML = entries.map(({evt, label, target, mapped})=>`
+    <div class="card card-pad" style="margin-bottom:8px;">
+      <div style="font-weight:var(--fw-semibold);color:var(--fg-title);">${evt.name}</div>
+      <div class="muted" style="font-size:11px;margin-bottom:6px;">${competitionName(evt.competition)} · ${evt.id}</div>
+      <div class="flex-gap-2">${label === 'Pre-Match' ? '<span class="badge badge-preplay">Pre-Match</span>' : '<span class="badge badge-inplay">In-Play</span>'} <span class="ic ic-16" style="color:var(--fg-muted)">→</span> <strong>${target}</strong></div>
+      ${!mapped ? `<div class="alert alert-warning" style="margin-top:8px;">${ICONS.alert()}<div>Not mapped to GTH for this competition yet.</div></div>` : ''}
+    </div>`).join('') || '<div class="empty-state">No staged changes.</div>';
+  const applyBtn = document.getElementById('override-apply');
+  applyBtn.textContent = 'Apply changes';
+  applyBtn.onclick = ()=> document.getElementById('eo-save').click();
+  openDrawer('drawer-override');
+});
 
-// Saved filter presets
+/* ---- Custom date & time range ---- */
+function toLocalInput(d){
+  const p = n=>String(n).padStart(2,'0');
+  return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+function openDateRangeModal(){
+  const from = eoCustomRange ? eoCustomRange.from : new Date(now);
+  const to = eoCustomRange ? eoCustomRange.to : new Date(now.getTime() + 7*86400000);
+  document.getElementById('dr-from').value = toLocalInput(from);
+  document.getElementById('dr-to').value = toLocalInput(to);
+  openOverlay('overlay-daterange');
+}
+document.getElementById('dr-apply').addEventListener('click', ()=>{
+  const from = new Date(document.getElementById('dr-from').value);
+  const to = new Date(document.getElementById('dr-to').value);
+  if (isNaN(from) || isNaN(to) || to < from){ toast('warning','Invalid range','Pick a valid start and end.'); return; }
+  eoCustomRange = { from, to };
+  closeOverlay('overlay-daterange');
+  renderEventsTable();
+});
+
+/* ---- Saved filter presets (centered modal + managed list) ---- */
+function currentEoFilters(){
+  return {
+    sport: document.getElementById('eo-filter-sport').value,
+    competition: document.getElementById('eo-filter-competition').value,
+    status: document.getElementById('eo-filter-status').value,
+    range: document.getElementById('eo-filter-range').value,
+    override: document.getElementById('eo-filter-override').value,
+  };
+}
 function renderPresets(){
-  document.getElementById('eo-presets-list').innerHTML = SAVED_PRESETS.map(p=>`
-    <span class="ai-suggestion-chip" onclick="applyPreset('${p.id}')">${p.name}</span>
-  `).join('') || '<span class="muted" style="font-size:12px;">No saved presets yet.</span>';
+  const list = document.getElementById('preset-list');
+  if (!list) return;
+  list.innerHTML = SAVED_PRESETS.map(p=>`
+    <div class="preset-row" data-id="${p.id}">
+      <div class="preset-row__main">
+        <div class="preset-row__name">${p.name}</div>
+        <div class="preset-row__date">Added ${new Date(p.createdAt).toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'})}</div>
+      </div>
+      <button class="btn btn-sm btn-tertiary" data-preset-action="apply">Apply</button>
+      <button class="icon-btn" data-preset-action="edit" aria-label="Rename preset">${ic('square-pen',16)}</button>
+      <button class="icon-btn" data-preset-action="delete" aria-label="Delete preset">${ic('trash-2',16)}</button>
+    </div>`).join('') || '<div class="muted" style="font-size:12px;">No saved presets yet.</div>';
 }
 function applyPreset(id){
   const p = SAVED_PRESETS.find(x=>x.id===id); if(!p) return;
@@ -592,23 +1067,37 @@ function applyPreset(id){
     document.getElementById('eo-filter-status').value = p.filters.status;
     document.getElementById('eo-filter-range').value = p.filters.range;
     document.getElementById('eo-filter-override').value = p.filters.override;
+    if (p.filters.range !== 'custom') eoCustomRange = null;
     renderEventsTable();
   }, 0);
+  closeOverlay('overlay-presets');
   toast('default','Preset applied', p.name);
 }
-document.getElementById('eo-save-preset').addEventListener('click', ()=>{
-  const name = prompt('Name this filter preset:');
-  if (!name) return;
-  const filters = {
-    sport: document.getElementById('eo-filter-sport').value,
-    competition: document.getElementById('eo-filter-competition').value,
-    status: document.getElementById('eo-filter-status').value,
-    range: document.getElementById('eo-filter-range').value,
-    override: document.getElementById('eo-filter-override').value,
-  };
-  SAVED_PRESETS.push({ id:'p'+Date.now(), name, filters });
+document.getElementById('eo-presets-btn').addEventListener('click', ()=>{ renderPresets(); document.getElementById('preset-name-input').value=''; openOverlay('overlay-presets'); });
+document.getElementById('preset-save-btn').addEventListener('click', ()=>{
+  const input = document.getElementById('preset-name-input');
+  const name = input.value.trim();
+  if (!name){ input.focus(); return; }
+  SAVED_PRESETS.push({ id:'p'+Date.now(), name, createdAt:new Date().toISOString(), filters:currentEoFilters() });
+  input.value='';
   renderPresets();
   toast('success','Preset saved', name);
+});
+// Delegated actions on the preset list — apply / rename / delete
+document.getElementById('preset-list').addEventListener('click', e=>{
+  const btn = e.target.closest('[data-preset-action]');
+  if (!btn) return;
+  const id = btn.closest('.preset-row').dataset.id;
+  const p = SAVED_PRESETS.find(x=>x.id===id); if(!p) return;
+  const action = btn.dataset.presetAction;
+  if (action === 'apply') applyPreset(id);
+  else if (action === 'delete'){
+    const i = SAVED_PRESETS.findIndex(x=>x.id===id);
+    SAVED_PRESETS.splice(i,1); renderPresets(); toast('default','Preset deleted', p.name);
+  } else if (action === 'edit'){
+    const name = prompt('Rename preset:', p.name);
+    if (name && name.trim()){ p.name = name.trim(); renderPresets(); }
+  }
 });
 
 /* ============================================================
@@ -630,11 +1119,11 @@ function renderAutomationLog(){
   ).sort((a,b)=>new Date(b.ts)-new Date(a.ts));
   document.getElementById('automation-log-list').innerHTML = rows.map(a=>{
     const [cls,label] = typeMap[a.type];
-    return `<div class="flex-gap-3" style="padding:10px 14px;border-bottom:1px solid var(--border-subtle);align-items:flex-start;">
+    return `<div class="flex-gap-3" style="padding:10px 14px;border-bottom:1px solid var(--border-muted);align-items:flex-start;">
       <span class="badge ${cls}" style="flex:none;margin-top:2px;">${label}</span>
       <div style="flex:1;">
-        <div style="font-size:12px;">${a.text}</div>
-        <div class="muted" style="font-size:11px;margin-top:2px;">${providerById(a.provider).name} · ${sportName(a.sport)} — ${a.competition} · ${fmtDate(a.ts)} · ${relTime(a.ts)}</div>
+        <div class="flex-gap-2" style="margin-bottom:3px;">${providerBadge(a.provider)}<span style="font-size:12px;">${a.text}</span></div>
+        <div class="muted" style="font-size:11px;">${sportName(a.sport)} — ${a.competition} · ${fmtDate(a.ts)} · ${relTime(a.ts)}</div>
       </div>
     </div>`;
   }).join('') || `<div class="empty-state">No automation events match these filters.</div>`;
@@ -651,7 +1140,7 @@ function renderProviderHealth(){
   document.getElementById('provider-health-cards').innerHTML = PROVIDERS.map(p=>{
     const h = PROVIDER_HEALTH[p.id];
     return `<div class="card card-pad">
-      <div class="flex-between"><strong style="font-size:13px;">${p.name}</strong>${healthBadge(h.status)}</div>
+      <div class="flex-between">${providerBadge(p.id)}${healthBadge(h.status)}</div>
       <div class="kpi__value" style="font-size:20px;margin-top:10px;">${h.uptime30d}%</div>
       <div class="kpi__sub">uptime, last 30 days</div>
     </div>`;
@@ -669,13 +1158,13 @@ function renderCoverage(){
     const p = providerById(c.provider);
     return `<div style="text-align:center;">
       <div class="gauge">${gaugeSvg(c.pct, p.color)}<div class="gauge__label">${c.pct}%</div></div>
-      <div style="font-size:12px;font-weight:600;margin-top:6px;">${p.name}</div>
-      <div class="muted" style="font-size:11px;">${c.servedEvents}/${c.assignedEvents} events</div>
+      <div style="margin-top:8px;display:flex;justify-content:center;">${providerBadge(p.id)}</div>
+      <div class="muted" style="font-size:11px;margin-top:4px;">${c.servedEvents}/${c.assignedEvents} events</div>
     </div>`;
   }).join('');
   document.getElementById('coverage-gaps-list').innerHTML = COVERAGE_GAPS.map(g=>`
     <div class="alert alert-${g.severity==='error'?'error':'warning'}" style="margin-bottom:8px;">
-      ${ICONS.alert}<div><strong>${g.sport} — ${g.competition}</strong>${g.issue}</div>
+      ${ICONS.alert()}<div><strong>${g.sport} — ${g.competition}</strong>${g.issue}</div>
     </div>`).join('') || `<div class="empty-state">No coverage gaps detected.</div>`;
 }
 
@@ -827,7 +1316,7 @@ function renderMappingTable(tableId, columns, rawRows, stateKey, rerender, actio
 
   tbody.innerHTML = rows.map(r=>'<tr>' + columns.map(c=>{
     const gthAttr = c.group==='gth' ? ' class="col-gth"' : '';
-    if (c.key==='__connector') return `<td style="text-align:center;width:32px;color:var(--fg-muted);">${ICONS.arrowRight}</td>`;
+    if (c.key==='__connector') return `<td style="text-align:center;width:32px;color:var(--fg-muted);">${ICONS.arrowRight()}</td>`;
     if (c.key==='__actions') return `<td>${actionsRenderer(r)}</td>`;
     if (c.key==='providerName') return `<td${gthAttr}><span class="badge badge-gray">${r.providerName}</span></td>`;
     if (c.key==='confidence') return r.confidence==null ? `<td${gthAttr}>—</td>` : `<td${gthAttr}><div class="flex-gap-2"><div class="confidence-bar" style="width:60px;"><div class="confidence-bar__fill" style="width:${r.confidence}%;background:${r.confidence>=85?'var(--green-solid)':'var(--yellow-solid)'};"></div></div><span style="font-size:11px;font-weight:600;">${r.confidence}%</span></div></td>`;
@@ -895,7 +1384,10 @@ const COLS_UNMAPPED_MT = [
 
 function renderSuggestedTab(){
   const display = GTH_MAPPINGS.filter(m=>m.status==='suggested').map(mappingDisplayRow);
-  renderFilterBar('filterbar-suggested', 'suggested', renderSuggestedTab, ()=>exportMappingCSV(display,'suggested_maps.csv'));
+  const panel = document.getElementById('mappings-suggestions');
+  if (panel) panel.style.display = display.length ? '' : 'none';
+  const title = document.getElementById('suggestions-title');
+  if (title) title.textContent = `${display.length} suggestion${display.length===1?'':'s'} to review`;
   const state = getTableState('suggested');
   const rows = applyFilterSort(display, state, ['providerSport','providerCompetition','providerMarketType','gthSport','gthCompetition','gthMarketType']);
   document.getElementById('suggested-cards').innerHTML = rows.map(r=>`
@@ -907,7 +1399,7 @@ function renderSuggestedTab(){
         </div>
         <div class="suggestion-card__path">${providerPathLabel(r)}</div>
       </div>
-      <div class="suggestion-card__arrow">${ICONS.arrowRight}</div>
+      <div class="suggestion-card__arrow">${ICONS.arrowRight()}</div>
       <div class="suggestion-card__gth">
         <div class="suggestion-card__label">AI SUGGESTION</div>
         <div class="suggestion-card__path">${[r.gthSport, r.gthCompetition, r.gthMarketType].filter(Boolean).join(' → ')}</div>
@@ -928,21 +1420,19 @@ function renderActiveCompTab(){
   const rows = GTH_MAPPINGS.filter(m=>m.status==='active' && m.level==='competition').map(mappingDisplayRow);
   renderMappingTable('table-active-competitions', COLS_ACTIVE_COMP, rows, 'active-competitions', renderActiveCompTab, (r)=>`
     <div class="flex-gap-1">
-      <span class="icon-btn" style="width:24px;height:24px;" title="Edit" onclick="openGthSearch('${r.id}')">${ICONS.edit}</span>
-      <span class="icon-btn" style="width:24px;height:24px;" title="History" onclick="showHistory('${r.id}')">${ICONS.history}</span>
-      <span class="icon-btn" style="width:24px;height:24px;" title="Delete" onclick="deleteMapping('${r.id}')">${ICONS.trash}</span>
+      <span class="icon-btn" style="width:24px;height:24px;" title="Edit" onclick="openGthSearch('${r.id}')">${ICONS.edit()}</span>
+      <span class="icon-btn" style="width:24px;height:24px;" title="History" onclick="showHistory('${r.id}')">${ICONS.history()}</span>
+      <span class="icon-btn" style="width:24px;height:24px;" title="Delete" onclick="deleteMapping('${r.id}')">${ICONS.trash()}</span>
     </div>`);
-  document.getElementById('active-comp-export').onclick = ()=>exportMappingCSV(rows,'active_mappings_competitions.csv');
 }
 function renderActiveMtTab(){
   const rows = GTH_MAPPINGS.filter(m=>m.status==='active' && m.level==='marketType').map(mappingDisplayRow);
   renderMappingTable('table-active-markettypes', COLS_ACTIVE_MT, rows, 'active-markettypes', renderActiveMtTab, (r)=>`
     <div class="flex-gap-1">
-      <span class="icon-btn" style="width:24px;height:24px;" title="Edit" onclick="openGthSearch('${r.id}')">${ICONS.edit}</span>
-      <span class="icon-btn" style="width:24px;height:24px;" title="History" onclick="showHistory('${r.id}')">${ICONS.history}</span>
-      <span class="icon-btn" style="width:24px;height:24px;" title="Delete" onclick="deleteMapping('${r.id}')">${ICONS.trash}</span>
+      <span class="icon-btn" style="width:24px;height:24px;" title="Edit" onclick="openGthSearch('${r.id}')">${ICONS.edit()}</span>
+      <span class="icon-btn" style="width:24px;height:24px;" title="History" onclick="showHistory('${r.id}')">${ICONS.history()}</span>
+      <span class="icon-btn" style="width:24px;height:24px;" title="Delete" onclick="deleteMapping('${r.id}')">${ICONS.trash()}</span>
     </div>`);
-  document.getElementById('active-mt-export').onclick = ()=>exportMappingCSV(rows,'active_mappings_market_types.csv');
 }
 function renderUnmappedCompTab(){
   const rows = GTH_MAPPINGS.filter(m=>(m.status==='unmapped'||m.status==='rejected') && m.level==='competition').map(mappingDisplayRow);
@@ -951,7 +1441,6 @@ function renderUnmappedCompTab(){
       <button class="btn btn-sm btn-secondary" onclick="openGthSearch('${r.id}')">Map</button>
       ${r.status==='unmapped' ? `<button class="btn btn-sm btn-tertiary" onclick="openReject('${r.id}')">Reject</button>` : ''}
     </div>`);
-  document.getElementById('unmapped-comp-export').onclick = ()=>exportMappingCSV(rows,'unmapped_competitions.csv');
 }
 function renderUnmappedMtTab(){
   const rows = GTH_MAPPINGS.filter(m=>(m.status==='unmapped'||m.status==='rejected') && m.level==='marketType').map(mappingDisplayRow);
@@ -960,22 +1449,59 @@ function renderUnmappedMtTab(){
       <button class="btn btn-sm btn-secondary" onclick="openGthSearch('${r.id}')">Map</button>
       ${r.status==='unmapped' ? `<button class="btn btn-sm btn-tertiary" onclick="openReject('${r.id}')">Reject</button>` : ''}
     </div>`);
-  document.getElementById('unmapped-mt-export').onclick = ()=>exportMappingCSV(rows,'unmapped_market_types.csv');
 }
 function refreshMappingCounts(){
   const suggestedCount = GTH_MAPPINGS.filter(m=>m.status==='suggested').length;
   const unmappedTabCount = GTH_MAPPINGS.filter(m=>m.status==='unmapped'||m.status==='rejected').length;
   const needsAttention = GTH_MAPPINGS.filter(m=>m.status==='suggested'||m.status==='unmapped').length;
-  document.getElementById('unmapped-count').textContent = needsAttention;
-  document.getElementById('mapping-nav-badge').textContent = needsAttention;
-  document.getElementById('suggested-tab-badge').textContent = suggestedCount;
-  document.getElementById('unmapped-tab-badge').textContent = unmappedTabCount;
-  document.getElementById('notif-btn').querySelector('.badge-count').style.display = needsAttention===0 ? 'none' : 'flex';
+  const unmappedEl = document.getElementById('unmapped-count');
+  if (unmappedEl) unmappedEl.textContent = needsAttention;
+  const navBadge = document.getElementById('mapping-nav-badge');
+  if (navBadge){
+    navBadge.textContent = needsAttention;
+    navBadge.style.display = needsAttention === 0 ? 'none' : '';
+    navBadge.setAttribute('aria-label', `${needsAttention} mapping${needsAttention===1?'':'s'} need attention`);
+  }
+  const suggBadge = document.getElementById('suggested-tab-badge');
+  if (suggBadge){ suggBadge.textContent = suggestedCount; suggBadge.style.display = suggestedCount===0?'none':''; }
+  const unmBadge = document.getElementById('unmapped-tab-badge');
+  if (unmBadge){ unmBadge.textContent = unmappedTabCount; unmBadge.style.display = unmappedTabCount===0?'none':''; }
+  const notif = document.getElementById('notif-btn');
+  if (notif){ const bc = notif.querySelector('.badge-count'); if(bc) bc.style.display = needsAttention===0 ? 'none' : 'flex'; }
 }
 function refreshAllMappingTabs(){
   renderSuggestedTab(); renderActiveCompTab(); renderActiveMtTab(); renderUnmappedCompTab(); renderUnmappedMtTab();
   refreshMappingCounts();
 }
+
+// Level segmented toggle (Competitions | Market Types) — replaces nested tabs
+function setMappingLevel(scope, level){
+  document.querySelectorAll(`#seg-${scope} .seg__btn`).forEach(b=> b.classList.toggle('active', b.dataset.level===level));
+  document.getElementById(`${scope}-comp-wrap`).style.display = level==='competition' ? '' : 'none';
+  document.getElementById(`${scope}-mt-wrap`).style.display = level==='marketType' ? '' : 'none';
+}
+document.querySelector('.main').addEventListener('click', e=>{
+  const b = e.target.closest('.seg__btn'); if(!b) return;
+  setMappingLevel(b.closest('.seg').id.replace('seg-',''), b.dataset.level);
+});
+function currentLevel(scope){ return document.querySelector(`#seg-${scope} .seg__btn.active`).dataset.level; }
+document.getElementById('active-export').addEventListener('click', ()=>{
+  const lvl = currentLevel('active');
+  const rows = GTH_MAPPINGS.filter(m=>m.status==='active' && m.level===lvl).map(mappingDisplayRow);
+  exportMappingCSV(rows, lvl==='competition' ? 'active_mappings_competitions.csv' : 'active_mappings_market_types.csv');
+});
+document.getElementById('unmapped-export').addEventListener('click', ()=>{
+  const lvl = currentLevel('unmapped');
+  const rows = GTH_MAPPINGS.filter(m=>(m.status==='unmapped'||m.status==='rejected') && m.level===lvl).map(mappingDisplayRow);
+  exportMappingCSV(rows, lvl==='competition' ? 'unmapped_competitions.csv' : 'unmapped_market_types.csv');
+});
+// Suggestions panel filters (provider + free text)
+(function(){
+  const prov = document.getElementById('sugg-provider');
+  PROVIDERS.forEach(p=> prov.innerHTML += `<option value="${p.id}">${p.name}</option>`);
+  prov.addEventListener('change', function(){ getTableState('suggested').provider = this.value; renderSuggestedTab(); });
+  document.getElementById('sugg-search').addEventListener('input', function(){ getTableState('suggested').text = this.value; renderSuggestedTab(); });
+})();
 
 function acceptSuggestion(id){
   const rec = GTH_MAPPINGS.find(m=>m.id===id); if(!rec) return;
@@ -1030,7 +1556,7 @@ function openGthSearch(id){
 function renderGthResults(query, level){
   gthSearchResultsCache = gthOptionsList(level).filter(g=>g.label.toLowerCase().includes(query.toLowerCase())).slice(0,8);
   document.getElementById('gth-search-results').innerHTML = gthSearchResultsCache.map((r,i)=>`
-    <div class="flex-between" style="padding:8px 4px;border-bottom:1px solid var(--border-subtle);font-size:13px;">
+    <div class="flex-between" style="padding:8px 4px;border-bottom:1px solid var(--border-muted);font-size:13px;">
       <span>${r.label}</span>
       <button class="btn btn-sm btn-secondary" onclick="confirmGthMatch(${i})">Select</button>
     </div>`).join('') || `<div class="muted" style="font-size:12px;padding:8px 4px;">No matches.</div>`;
@@ -1063,7 +1589,7 @@ function deleteMapping(id){
   const rec = GTH_MAPPINGS.find(m=>m.id===id); if(!rec) return;
   document.getElementById('confirm-title').textContent = 'Unmap this item?';
   document.getElementById('confirm-subtitle').textContent = 'It will move to Unmapped and can no longer be used in defaults or blending until re-mapped.';
-  document.getElementById('confirm-body').innerHTML = `<div class="alert alert-error">${ICONS.alert}<div><strong>${providerPathLabel(rec)}</strong> (${providerById(rec.provider).name}) currently mapped to ${gthPathLabel(rec.gth)}</div></div>`;
+  document.getElementById('confirm-body').innerHTML = `<div class="alert alert-error">${ICONS.alert()}<div><strong>${providerPathLabel(rec)}</strong> (${providerById(rec.provider).name}) currently mapped to ${gthPathLabel(rec.gth)}</div></div>`;
   document.getElementById('confirm-ok').onclick = () => {
     rec.status = 'unmapped'; delete rec.gth;
     logAudit('Provider Mappings','Mapping deleted',`${providerPathLabel(rec)} (${providerById(rec.provider).name}) unmapped`);
@@ -1107,9 +1633,9 @@ function renderKpiRow(){
 }
 function renderAnTable(){
   document.getElementById('an-table-tbody').innerHTML = Array.from(activeProviderFilter).map(id=>{
-    const p = providerById(id), a = ANALYTICS_SUMMARY[id];
+    const a = ANALYTICS_SUMMARY[id];
     return `<tr>
-      <td><span class="provider-chip"><span class="swatch" style="background:${p.color}"></span>${p.name}</span></td>
+      <td>${providerBadge(id)}</td>
       <td class="num">${fmtMoney(a.revenue)}</td>
       <td class="num">${fmtNum(a.bets)}</td>
       <td class="num">${a.coveragePct}%</td>
@@ -1187,6 +1713,7 @@ function renderAuditLog(){
   const areaF = document.getElementById('al-filter-area').value;
   const userF = document.getElementById('al-filter-user').value.toLowerCase();
   const rows = AUDIT_LOG.filter(a=> (!areaF || a.area===areaF) && (!userF || a.user.toLowerCase().includes(userF)) );
+  document.getElementById('al-count').textContent = rows.length;
   document.getElementById('audit-tbody').innerHTML = rows.map(a=>`
     <tr>
       <td>${fmtDate(a.ts)}</td>
@@ -1258,7 +1785,7 @@ function handleAiInput(raw){
       ], ()=>{
         pendingHierarchy[`sport:${sport.id}`] = provider.id;
         renderHierarchyTree();
-        aiSay(`Done — queued as a pending change on the Blending Configuration screen. <a onclick="document.querySelector('.nav-item[data-view=blending-config]').click(); document.getElementById('ai-panel').classList.remove('open');" style="color:var(--blue-fg);cursor:pointer;text-decoration:underline;">Open Blending Configuration</a> to review and save.`);
+        aiSay(`Done — queued as a pending change on the Blending Configuration screen. <a onclick="goToView('blending-config'); document.getElementById('ai-panel').classList.remove('open');" style="color:var(--blue-fg);cursor:pointer;text-decoration:underline;">Open Blending Configuration</a> to review and save.`);
       }), 300);
     };
     pendingAiYes = yesHandler;
@@ -1271,7 +1798,7 @@ function handleAiInput(raw){
 
   // "map A's B to our B"
   if (/^map /.test(lower)){
-    aiSay(`I found 1 close match in Provider Mappings for that description. <a onclick="document.querySelector('.nav-item[data-view=mappings]').click(); document.getElementById('ai-panel').classList.remove('open');" style="color:var(--blue-fg);cursor:pointer;text-decoration:underline;">Review it in Provider Mappings</a> — I'll act on it there so you can double-check the AI suggestion before confirming.`);
+    aiSay(`I found 1 close match in Provider Mappings for that description. <a onclick="goToView('mappings'); document.getElementById('ai-panel').classList.remove('open');" style="color:var(--blue-fg);cursor:pointer;text-decoration:underline;">Review it in Provider Mappings</a> — I'll act on it there so you can double-check the AI suggestion before confirming.`);
     return;
   }
 
@@ -1291,7 +1818,7 @@ function handleAiInput(raw){
       evt.overrides[mt] = { provider: provider.id, at:new Date().toISOString(), by:'m.tato' };
       logAudit('Level 2 — Event Overrides','Override applied (via AI Assistant)',`${evt.id}: ${mtLabel} → ${provider.name}`);
       renderEventsTable();
-      aiSay(`Applied. <a onclick="document.querySelector('.nav-item[data-view=event-overrides]').click(); document.getElementById('ai-panel').classList.remove('open');" style="color:var(--blue-fg);cursor:pointer;text-decoration:underline;">Open Event Overrides</a> to see it.`);
+      aiSay(`Applied. <a onclick="goToView('event-overrides'); document.getElementById('ai-panel').classList.remove('open');" style="color:var(--blue-fg);cursor:pointer;text-decoration:underline;">Open Event Overrides</a> to see it.`);
     });
     return;
   }
@@ -1301,7 +1828,7 @@ function handleAiInput(raw){
   if (m){
     const sport = findSportByName(m[1].trim());
     if (!sport){ aiSay(`I couldn't match that to an in-scope sport.`); return; }
-    aiSay(`<strong>${sport.name}</strong> default provider: ${providerById(sport.defaultProvider)?.name || 'not set'} (Sport level). Competitions may override this — check the tree in Blending Configuration for specifics.`);
+    aiSay(`<strong>${sport.name}</strong> default: Pre-Match ${providerById(sport.prematch)?.name || 'not set'}, In-Play ${providerById(sport.inplay)?.name || 'not set'} (Sport level). Groups and competitions may override — check the tree in Blending Configuration.`);
     return;
   }
   if (lower.includes('unmapped') && lower.includes('for')){
@@ -1330,8 +1857,17 @@ document.getElementById('ai-send').addEventListener('click', ()=>{
   input.value='';
 });
 document.getElementById('ai-input').addEventListener('keydown', e=>{ if(e.key==='Enter') document.getElementById('ai-send').click(); });
-document.getElementById('ai-fab').addEventListener('click', ()=> document.getElementById('ai-panel').classList.add('open'));
-document.getElementById('ai-close').addEventListener('click', ()=> document.getElementById('ai-panel').classList.remove('open'));
+// '/' focuses the active view's in-content search box, if it has one
+document.addEventListener('keydown', e=>{
+  if (e.key==='/' && !['INPUT','TEXTAREA'].includes(document.activeElement?.tagName)){
+    const box = document.querySelector('.view.active [data-search]');
+    if (box){ e.preventDefault(); box.focus(); }
+  }
+});
+function openAiPanel(){ document.getElementById('ai-panel').classList.add('open'); document.documentElement.style.setProperty('--panel-offset','360px'); }
+function closeAiPanel(){ document.getElementById('ai-panel').classList.remove('open'); document.documentElement.style.setProperty('--panel-offset','0px'); }
+document.getElementById('ai-fab').addEventListener('click', openAiPanel);
+document.getElementById('ai-close').addEventListener('click', closeAiPanel);
 document.getElementById('ai-suggestions').innerHTML = AI_SUGGESTIONS.map(s=>`<span class="ai-suggestion-chip" onclick="document.getElementById('ai-input').value='${s.replace(/'/g,"\\'")}'; document.getElementById('ai-send').click();">${s}</span>`).join('');
 
 /* ============================================================
@@ -1339,7 +1875,6 @@ document.getElementById('ai-suggestions').innerHTML = AI_SUGGESTIONS.map(s=>`<sp
    ============================================================ */
 function init(){
   aiSay(`Hi — I can configure providers or answer questions in plain language. Try: "Set BetRadar as default for Tennis" (Journey 6 from the PRD) or one of the suggestions below.`);
-  updateHeaderSearchForView('blending-config');
   populateProviderFilter();
   populateEventFilters();
   renderPresets();
@@ -1353,5 +1888,6 @@ function init(){
   renderProviderFilterChips();
   renderAnalytics();
   renderAuditLog();
+  goToView('blending-config');
 }
 init();
